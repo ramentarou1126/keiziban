@@ -218,7 +218,7 @@
     overflow:hidden;
     transition:max-height .2s ease;
   }
-  .review.open .review-text-wrap{ max-height:600px; }
+  .review.open .review-text-wrap{ max-height:1400px; }
   .review-text{
     padding:0 20px 20px 90px;
     font-size:14px; color:#C8D2DD;
@@ -399,7 +399,7 @@
 
     <div class="field">
       <label for="f-name">名前（未入力の場合は「匿名」になります）</label>
-      <input type="text" id="f-name" maxlength="24" placeholder="例：ゆゆ">
+      <input type="text" id="f-name" maxlength="24" placeholder="例：ラーメン太郎">
     </div>
 
     <div class="field">
@@ -646,17 +646,20 @@
         const date = r.createdAt ? new Date(r.createdAt) : null;
         const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
         const isMine = r.id === deviceId;
-        const longText = r.body.length > 250;
         return `
           <div class="review">
-            <div class="rating-node"><div class="n">${r.rating.toFixed(1)}</div><div class="s">STARS</div></div>
-            <div class="review-body">
-              <div class="review-top">
-                <div class="review-title">${escapeHtml(r.title)}${isMine ? '<span class="mine-tag">あなたの投稿</span>' : ''}</div>
-                <div class="review-meta">${escapeHtml(r.name)} ・ ${dateStr}</div>
+            <button class="review-head" onclick="this.parentElement.classList.toggle('open')">
+              <div class="rating-node"><div class="n">${r.rating.toFixed(1)}</div><div class="s">STARS</div></div>
+              <div class="review-body">
+                <div class="review-top">
+                  <div class="review-title">${escapeHtml(r.title)}${isMine ? '<span class="mine-tag">あなたの投稿</span>' : ''}</div>
+                  <div class="review-meta">${escapeHtml(r.name)} ・ ${dateStr}</div>
+                </div>
               </div>
-              <div class="review-text ${longText ? 'collapsed' : ''}">${escapeHtml(r.body)}</div>
-              ${longText ? '<button class="expand-btn" onclick="this.previousElementSibling.classList.toggle(\'collapsed\'); this.textContent = this.previousElementSibling.classList.contains(\'collapsed\') ? \'▼ 全文を読む\' : \'▲ 閉じる\';">▼ 全文を読む</button>' : ''}
+              <div class="chevron">▼</div>
+            </button>
+            <div class="review-text-wrap">
+              <div class="review-text">${escapeHtml(r.body)}</div>
             </div>
           </div>`;
       }).join('');
