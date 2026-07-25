@@ -19,6 +19,15 @@
     --line:rgba(120,150,180,0.16);
     --danger:#FF6B6B;
   }
+  body.theme-light{
+    --bg:#F4F6F8;
+    --bg-panel:#FFFFFF;
+    --grid:rgba(20,80,70,0.05);
+    --text:#171C24;
+    --text-dim:#5B6675;
+    --line:rgba(20,40,60,0.14);
+  }
+  body.theme-light .review-text, body.theme-light .post-body, body.theme-light .terms-body{ color:#2A323D; }
   *{box-sizing:border-box;}
   html{scroll-behavior:smooth;}
   body{
@@ -110,6 +119,27 @@
   .tab-btn.active{ background:rgba(79,227,193,0.1); color:var(--cyan); }
   .tab-btn:hover{ color:var(--text); }
 
+  .gear-btn{
+    position:absolute; top:18px; right:18px;
+    background:none; border:1px solid var(--line);
+    color:var(--text-dim);
+    width:36px; height:36px;
+    font-size:17px; line-height:1;
+    cursor:pointer;
+    transition:color .15s ease, border-color .15s ease, transform .3s ease;
+  }
+  .gear-btn:hover{ color:var(--cyan); border-color:var(--cyan); transform:rotate(45deg); }
+
+  .terms-body{
+    font-size:13px; line-height:1.9; color:#C8D2DD;
+    background:rgba(255,255,255,0.02); border:1px solid var(--line);
+    padding:22px 20px;
+  }
+  .terms-body p{ margin:0 0 14px; }
+  .terms-body ul{ margin:0 0 14px; padding-left:20px; }
+  .terms-body li{ margin-bottom:6px; }
+  .terms-body strong{ color:var(--cyan); }
+
   .board-userbar{
     display:flex; justify-content:space-between; align-items:center;
     margin-bottom:22px; padding-bottom:14px;
@@ -154,6 +184,41 @@
     background:none; border:1px solid var(--amber); color:var(--amber);
     font-family:'JetBrains Mono', monospace; font-size:11px;
     padding:6px 10px; cursor:pointer;
+  }
+  .link-chip{
+    display:inline-block; margin-top:8px; padding:5px 10px;
+    border:1px solid var(--line); font-size:11px; color:var(--text-dim);
+  }
+  .reaction-row{
+    padding:10px 18px 4px; display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+    border-top:1px solid var(--line);
+  }
+  .reaction-chip{
+    font-size:13px; border:1px solid var(--line); padding:3px 8px;
+    background:rgba(255,255,255,0.02);
+  }
+  .reaction-add-btn{
+    background:none; border:1px dashed var(--line); color:var(--text-dim);
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    padding:5px 10px; cursor:pointer;
+  }
+  .reaction-add-btn:hover{ color:var(--cyan); border-color:var(--cyan); }
+  .reaction-picker{
+    display:none; flex-wrap:wrap; gap:4px; width:100%;
+    padding:8px; border:1px solid var(--line); margin-top:4px;
+  }
+  .reaction-pick{
+    background:none; border:1px solid transparent; font-size:18px;
+    cursor:pointer; padding:4px 6px;
+  }
+  .reaction-pick:hover{ border-color:var(--cyan); }
+  .reaction-detail-btn{
+    background:none; border:none; color:var(--text-dim); font-size:10.5px;
+    cursor:pointer; padding:0; width:100%; text-align:left; margin-top:4px;
+  }
+  .reaction-detail{
+    width:100%; font-size:11px; color:var(--text-dim);
+    padding:6px 0 0; line-height:1.7;
   }
   .admin-user-row{
     display:flex; justify-content:space-between; align-items:center;
@@ -408,14 +473,16 @@
 
 <header class="hero">
   <div class="scanline"></div>
+  <button id="settings-gear-btn" class="gear-btn" title="設定" aria-label="設定">⚙</button>
   <div class="eyebrow">1:2000 SCALE EARTH SIMULATION — BEDROCK EDITION</div>
   <h1 class="title"><span class="men">麺</span>Earth 掲示板</h1>
   <p class="tagline">プレイヤーからのレビューを集める場所。良いところも、改善してほしいところも。</p>
-  <div class="coords mono">SERVER STATUS: <span style="color:var(--cyan)">ONLINE</span> ・ UPLINK v0.3</div>
+  <div class="coords mono">SERVER STATUS: <span style="color:var(--cyan)">ONLINE</span> ・ UPLINK v0.4</div>
 
   <div class="tab-row">
     <button class="tab-btn active" id="tab-review-btn">★ レビュー</button>
     <button class="tab-btn" id="tab-board-btn">💬 掲示板</button>
+    <button class="tab-btn" id="tab-terms-btn">📜 規約</button>
   </div>
 </header>
 
@@ -493,6 +560,9 @@
       <div id="admin-panel" style="display:none;">
         <div class="section-label"><span>管理パネル：制限中のユーザー</span><div class="line"></div></div>
         <div id="admin-restricted-list"></div>
+
+        <div class="section-label"><span>管理パネル：ドメイン申請</span><div class="line"></div></div>
+        <div id="admin-domain-requests"></div>
       </div>
 
       <div class="hud-panel" style="max-width:340px; margin:0 auto 22px;">
@@ -502,6 +572,11 @@
 
       <div class="section-label"><span>新規投稿</span><div class="line"></div></div>
 
+      <div class="field" style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true">
+        <label for="p-website">Website（空欄のままにしてください）</label>
+        <input type="text" id="p-website" tabindex="-1" autocomplete="off">
+      </div>
+
       <div class="field">
         <label for="p-title">タイトル</label>
         <input type="text" id="p-title" maxlength="60" placeholder="例：新拠点の建材を募集しています">
@@ -510,6 +585,10 @@
         <label for="p-body">本文（500文字以内）</label>
         <textarea id="p-body" maxlength="500"></textarea>
         <div class="count"><span id="p-body-count">0</span> / 500</div>
+        <div class="count" style="text-align:left; margin-top:6px;">
+          リンクを貼れるのは許可されたサイトだけです。
+          <button type="button" id="open-domain-request-btn" class="expand-hint" style="background:none;border:none;color:var(--cyan);cursor:pointer;padding:0;font-family:'JetBrains Mono',monospace;">貼りたいサイトが無ければ申請する →</button>
+        </div>
       </div>
       <div class="field">
         <label for="p-image">画像を添付（任意・500KBまで）</label>
@@ -542,6 +621,44 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- ===== 規約 タブ ===== -->
+  <div id="panel-terms" style="display:none;">
+    <div class="section-label"><span>麺Earth 掲示板 利用規約</span><div class="line"></div></div>
+    <div class="terms-body mono">
+<p>麺Earth 掲示板（以下「本掲示板」）は、麺Earthサーバーのプレイヤー同士が交流し、意見交換を行うための場です。本掲示板を利用する時点で、以下の内容に同意したものとみなします。管理者は、本規約に違反した投稿・アカウントに対して、通知の有無にかかわらず、投稿の削除、投稿の一時的な制限、アカウントの利用停止（BAN）などの措置を行う権利を持ちます。</p>
+
+<p><strong>第1条（禁止事項）</strong><br>
+利用者は、本掲示板において次の行為を行ってはなりません。</p>
+<ul>
+<li>荒らし行為、他者を不快にさせる発言、誹謗中傷、および執拗な迷惑行為（スパム）</li>
+<li>下ネタ、性的な内容を含む発言・画像、および不快感を与える絵文字・画像の投稿</li>
+<li>麺Earthサーバーおよびそのコミュニティに関係のないレビュー・投稿・画像の投稿</li>
+<li>自分自身または第三者の個人情報を掲載する行為（本人の同意の有無にかかわらず禁止します）</li>
+<li>犯罪行為の予告、違法薬物に関する発言・勧誘</li>
+<li>他者への「なりすまし」行為</li>
+<li>ゲーム内アカウントの売買、リアルマネートレード（RMT）に関する発言・勧誘</li>
+<li>チート、バグ、脆弱性の悪用方法の共有・助長</li>
+<li>不審な外部サイトやフィッシングサイトへの誘導</li>
+<li>麺Earthに関係のない商品・サービス・他サーバー等の無断宣伝</li>
+</ul>
+
+<p><strong>第2条（投稿内容の取り扱い）</strong><br>
+本掲示板への投稿は、原則として投稿から約1ヶ月が経過すると自動的に内容が非表示となります。ただし、規約違反が確認された投稿については、期間にかかわらず管理者の判断で随時削除される場合があります。</p>
+
+<p><strong>第3条（リンク・添付ファイルについて）</strong><br>
+投稿本文にURLを含める場合、管理者があらかじめ許可したドメインのみリンクとして表示されます。許可されていないドメインへのリンクを貼りたい場合は、掲示板内の申請フォームより理由を添えて申請してください。申請内容および申請者のDiscordアカウント情報は、審査のため管理者のみが閲覧します。画像を添付する場合は500KB以内とし、内容が第1条の禁止事項に該当する場合は削除の対象となります。</p>
+
+<p><strong>第4条（投稿頻度・迷惑行為対策）</strong><br>
+投稿は6時間に1回までとします。この制限を回避しようとする連続投稿など、スパムと判断される行為が確認された場合、自動的に7日間投稿ができなくなることがあります。また、不正なアクセスやボットによる自動投稿と判断される行為についても、投稿を制限する場合があります。</p>
+
+<p><strong>第5条（管理者権限）</strong><br>
+管理者は、本規約の運用上必要と判断した場合、投稿の削除、利用者の投稿制限・利用停止、絵文字リアクションの制限、その他本掲示板の適切な運営のために必要な措置を行うことができます。</p>
+
+<p><strong>第6条（規約の変更）</strong><br>
+本規約は、予告なく変更されることがあります。変更後も本掲示板を利用し続けた場合、変更後の規約に同意したものとみなします。</p>
+    </div>
   </div>
 
 </div>
@@ -585,6 +702,72 @@
   </div>
 </div>
 
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settings-overlay">
+  <div class="modal">
+    <h2>設定</h2>
+    <div class="sub">この設定はこの端末・ブラウザだけに保存されます（他の人には影響しません）</div>
+
+    <div class="field">
+      <label>テーマ</label>
+      <select id="setting-theme" class="mono" style="width:100%; background:#050810; color:var(--text); border:1px solid var(--line); padding:10px;">
+        <option value="dark">黒寄り（ダーク）</option>
+        <option value="light">白寄り（ライト）</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label><input type="checkbox" id="setting-hide-images"> 画像を表示しない</label>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="setting-hide-links"> リンクを表示しない（リンク文字列を隠す）</label>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="setting-allow-unverified-links"> 未承認のリンクも表示する（自己責任）</label>
+    </div>
+
+    <div class="field">
+      <label for="setting-blocked-ids">表示しないDiscord ID（カンマ区切りで複数指定可）</label>
+      <input type="text" id="setting-blocked-ids" placeholder="例：123456789012345678, 987654321098765432">
+    </div>
+    <div class="field">
+      <label for="setting-blocked-keywords">表示しないキーワード（カンマ区切りで複数指定可）</label>
+      <input type="text" id="setting-blocked-keywords" placeholder="例：荒らし, スパム">
+    </div>
+
+    <div class="status-msg ok" id="settings-status-msg"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="settings-cancel-btn">閉じる</button>
+      <button class="btn-primary" id="settings-save-btn">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ドメイン申請モーダル -->
+<div class="modal-overlay" id="domain-request-overlay">
+  <div class="modal">
+    <h2>リンク許可の申請</h2>
+    <div class="sub">申請内容は管理者だけが確認できます。承認されると、そのドメインが誰でも投稿に貼れるようになります。</div>
+
+    <div class="field">
+      <label for="dr-domain">貼りたいサイトのドメイン</label>
+      <input type="text" id="dr-domain" placeholder="例：example.com">
+    </div>
+    <div class="field">
+      <label for="dr-reason">申請理由</label>
+      <textarea id="dr-reason" maxlength="300" placeholder="例：〇〇の攻略情報をまとめたページを共有したいため"></textarea>
+    </div>
+
+    <div class="status-msg" id="dr-status-msg"></div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" id="dr-cancel-btn">キャンセル</button>
+      <button class="btn-primary" id="dr-submit-btn">申請する</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
@@ -616,6 +799,61 @@
   const SPAM_TRIGGER_COUNT = 4;                       // クールダウン無視の連続試行回数
   const MAX_IMAGE_BYTES = 500 * 1024;                 // 画像添付の上限
   const POST_EXPIRE_MS = 30 * 24 * 60 * 60 * 1000;    // 投稿の閲覧期限（約1ヶ月）
+  const MAX_REACTIONS = 20;                           // 1投稿あたりの絵文字リアクション上限
+  const MIN_ACCOUNT_AGE_MS = 3 * 24 * 60 * 60 * 1000; // BOT対策：作成から3日未満のDiscordアカウントは投稿不可
+
+  // リアクションとして選べる絵文字（不快な絵文字は最初から選択肢に含めていません）
+  const ALLOWED_REACTION_EMOJIS = ['👍','❤️','😂','🎉','😮','😢','🔥','👏','🙌','😍','🤔','👌'];
+
+  // 最初から許可されているドメイン（大文字小文字・www有無を無視して判定）
+  const PRE_APPROVED_DOMAINS = [
+    'youtube.com','youtu.be','x.com','github.com','github.io',
+    'tiktok.com','twitch.tv','twich.tv','minecraft.net','curseforge.com',
+    'xgames.jp','xserver.ne.jp','drive.xserver.ne.jp','game.xserver.ne.jp',
+    'vps.xserver.ne.jp','xserver.com','xfree.ne.jp',
+    'discord.com','discord.gg','discordapp.com','disbord.org',
+    'yahoo.co.jp'
+  ];
+  let dynamicAllowedDomains = [];
+
+  function normalizeDomain(d) {
+    return d.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+  }
+  function isDomainAllowed(hostname) {
+    const h = hostname.toLowerCase().replace(/^www\./, '');
+    const all = [...PRE_APPROVED_DOMAINS, ...dynamicAllowedDomains];
+    return all.some(d => h === d || h.endsWith('.' + d));
+  }
+
+  onValue(ref(db, 'allowedDomains'), (snap) => {
+    const val = snap.val() || {};
+    dynamicAllowedDomains = Object.values(val).map(v => v.domain).filter(Boolean);
+  });
+
+  // ================= 個人設定（この端末だけに保存） =================
+  const DEFAULT_SETTINGS = {
+    theme: 'dark',
+    hideImages: false,
+    hideLinks: false,
+    allowUnverifiedLinks: false,
+    blockedIds: [],
+    blockedKeywords: []
+  };
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem('men_earth_settings');
+      if (!raw) return { ...DEFAULT_SETTINGS };
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    } catch { return { ...DEFAULT_SETTINGS }; }
+  }
+  function saveSettingsToStorage(s) {
+    localStorage.setItem('men_earth_settings', JSON.stringify(s));
+  }
+  let userSettings = loadSettings();
+  function applyTheme() {
+    document.body.classList.toggle('theme-light', userSettings.theme === 'light');
+  }
+  applyTheme();
 
 
   // ---------- 端末ごとのID（1人1レビューの判定に使用） ----------
@@ -864,20 +1102,108 @@
   // ================= タブ切り替え =================
   const tabReviewBtn = document.getElementById('tab-review-btn');
   const tabBoardBtn = document.getElementById('tab-board-btn');
+  const tabTermsBtn = document.getElementById('tab-terms-btn');
   const panelReview = document.getElementById('panel-review');
   const panelBoard = document.getElementById('panel-board');
+  const panelTerms = document.getElementById('panel-terms');
 
-  tabReviewBtn.onclick = () => {
-    tabReviewBtn.classList.add('active');
-    tabBoardBtn.classList.remove('active');
-    panelReview.style.display = '';
-    panelBoard.style.display = 'none';
+  function showTab(which) {
+    tabReviewBtn.classList.toggle('active', which === 'review');
+    tabBoardBtn.classList.toggle('active', which === 'board');
+    tabTermsBtn.classList.toggle('active', which === 'terms');
+    panelReview.style.display = which === 'review' ? '' : 'none';
+    panelBoard.style.display = which === 'board' ? '' : 'none';
+    panelTerms.style.display = which === 'terms' ? '' : 'none';
+  }
+  tabReviewBtn.onclick = () => showTab('review');
+  tabBoardBtn.onclick = () => showTab('board');
+  tabTermsBtn.onclick = () => showTab('terms');
+
+  // ================= 設定モーダル =================
+  const settingsGearBtn = document.getElementById('settings-gear-btn');
+  const settingsOverlay = document.getElementById('settings-overlay');
+  const settingsCancelBtn = document.getElementById('settings-cancel-btn');
+  const settingsSaveBtn = document.getElementById('settings-save-btn');
+  const settingThemeSel = document.getElementById('setting-theme');
+  const settingHideImages = document.getElementById('setting-hide-images');
+  const settingHideLinks = document.getElementById('setting-hide-links');
+  const settingAllowUnverified = document.getElementById('setting-allow-unverified-links');
+  const settingBlockedIds = document.getElementById('setting-blocked-ids');
+  const settingBlockedKeywords = document.getElementById('setting-blocked-keywords');
+  const settingsStatusMsg = document.getElementById('settings-status-msg');
+
+  settingsGearBtn.onclick = () => {
+    settingThemeSel.value = userSettings.theme;
+    settingHideImages.checked = userSettings.hideImages;
+    settingHideLinks.checked = userSettings.hideLinks;
+    settingAllowUnverified.checked = userSettings.allowUnverifiedLinks;
+    settingBlockedIds.value = userSettings.blockedIds.join(', ');
+    settingBlockedKeywords.value = userSettings.blockedKeywords.join(', ');
+    settingsStatusMsg.textContent = '';
+    settingsOverlay.classList.add('open');
   };
-  tabBoardBtn.onclick = () => {
-    tabBoardBtn.classList.add('active');
-    tabReviewBtn.classList.remove('active');
-    panelBoard.style.display = '';
-    panelReview.style.display = 'none';
+  settingsCancelBtn.onclick = () => settingsOverlay.classList.remove('open');
+  settingsOverlay.onclick = (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('open'); };
+
+  settingsSaveBtn.onclick = () => {
+    userSettings = {
+      theme: settingThemeSel.value,
+      hideImages: settingHideImages.checked,
+      hideLinks: settingHideLinks.checked,
+      allowUnverifiedLinks: settingAllowUnverified.checked,
+      blockedIds: settingBlockedIds.value.split(',').map(s => s.trim()).filter(Boolean),
+      blockedKeywords: settingBlockedKeywords.value.split(',').map(s => s.trim()).filter(Boolean)
+    };
+    saveSettingsToStorage(userSettings);
+    applyTheme();
+    settingsStatusMsg.textContent = '保存しました。反映するには一覧を再読み込みします…';
+    if (typeof renderFilteredBoard === 'function') renderFilteredBoard();
+    setTimeout(() => settingsOverlay.classList.remove('open'), 600);
+  };
+
+  // ================= ドメイン申請モーダル =================
+  const domainRequestOverlay = document.getElementById('domain-request-overlay');
+  const openDomainRequestBtn = document.getElementById('open-domain-request-btn');
+  const drCancelBtn = document.getElementById('dr-cancel-btn');
+  const drSubmitBtn = document.getElementById('dr-submit-btn');
+  const drDomain = document.getElementById('dr-domain');
+  const drReason = document.getElementById('dr-reason');
+  const drStatusMsg = document.getElementById('dr-status-msg');
+
+  openDomainRequestBtn.onclick = () => {
+    drDomain.value = ''; drReason.value = ''; drStatusMsg.textContent = '';
+    domainRequestOverlay.classList.add('open');
+  };
+  drCancelBtn.onclick = () => domainRequestOverlay.classList.remove('open');
+  domainRequestOverlay.onclick = (e) => { if (e.target === domainRequestOverlay) domainRequestOverlay.classList.remove('open'); };
+
+  drSubmitBtn.onclick = async () => {
+    if (!currentUser) { drStatusMsg.textContent = 'ログインが必要です。'; drStatusMsg.className = 'status-msg error'; return; }
+    const domain = normalizeDomain(drDomain.value);
+    const reason = drReason.value.trim();
+    if (!domain) { drStatusMsg.textContent = 'ドメインを入力してください。'; drStatusMsg.className = 'status-msg error'; return; }
+    if (!reason) { drStatusMsg.textContent = '申請理由を入力してください。'; drStatusMsg.className = 'status-msg error'; return; }
+
+    drSubmitBtn.disabled = true;
+    try {
+      await push(ref(db, 'domainRequests'), {
+        domain, reason,
+        requesterUid: currentUser.uid,
+        requesterDiscordId: currentClaims.discord_id,
+        requesterName: currentClaims.discord_global_name || 'unknown',
+        createdAt: Date.now(),
+        status: 'pending'
+      });
+      drStatusMsg.textContent = '申請しました。管理者の確認をお待ちください。';
+      drStatusMsg.className = 'status-msg ok';
+      setTimeout(() => domainRequestOverlay.classList.remove('open'), 900);
+    } catch (e) {
+      console.error(e);
+      drStatusMsg.textContent = '申請に失敗しました。';
+      drStatusMsg.className = 'status-msg error';
+    } finally {
+      drSubmitBtn.disabled = false;
+    }
   };
 
   // ================= 掲示板：Discordログイン =================
@@ -964,7 +1290,7 @@
     boardUsername.textContent = `${currentClaims.discord_global_name || 'unknown'} としてログイン中`;
     adminBanner.style.display = isAdmin ? '' : 'none';
     document.getElementById('admin-panel').style.display = isAdmin ? '' : 'none';
-    if (isAdmin) watchAdminUserMeta();
+    if (isAdmin) { watchAdminUserMeta(); watchAdminDomainRequests(); }
 
     watchMyPostingStatus(user.uid);
     watchBoardPosts();
@@ -1030,12 +1356,25 @@
   // ================= 投稿する =================
   postSubmitBtn.onclick = async () => {
     if (!currentUser) return;
+
+    // ハニーポット：ボットが埋めがちな隠しフィールドに値が入っていたら何もせず終了
+    const honeypot = document.getElementById('p-website').value;
+    if (honeypot) { return; }
+
     const title = pTitle.value.trim();
     const body = pBody.value.trim();
 
     if (!title) { showBoardStatus('タイトルを入力してください。', true); return; }
     if (!body) { showBoardStatus('本文を入力してください。', true); return; }
     if (body.length > 500) { showBoardStatus('本文は500文字以内にしてください。', true); return; }
+
+    if (!isAdmin && currentClaims.discord_created_at) {
+      const accountAge = Date.now() - Number(currentClaims.discord_created_at);
+      if (accountAge < MIN_ACCOUNT_AGE_MS) {
+        showBoardStatus('作成されたばかりのDiscordアカウントは投稿できません（BOT対策）。', true);
+        return;
+      }
+    }
 
     postSubmitBtn.disabled = true;
     try {
@@ -1104,6 +1443,17 @@
   // ================= 投稿一覧 =================
   let boardWatchStarted = false;
   let authorNameByUid = {};
+  let allBoardPosts = [];
+
+  const boardFilterKeyword = document.getElementById('board-filter-keyword');
+  const boardFilterLength = document.getElementById('board-filter-length');
+  const boardFilterDate = document.getElementById('board-filter-date');
+  const boardFilterImage = document.getElementById('board-filter-image');
+  [boardFilterKeyword, boardFilterLength, boardFilterDate, boardFilterImage].forEach(el => {
+    el.addEventListener('input', renderFilteredBoard);
+    el.addEventListener('change', renderFilteredBoard);
+  });
+
   function watchBoardPosts() {
     if (boardWatchStarted) return;
     boardWatchStarted = true;
@@ -1113,13 +1463,85 @@
         .map(([id, v]) => ({ id, ...v }))
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       items.forEach(p => { if (p.authorUid) authorNameByUid[p.authorUid] = p.authorName; });
-      renderBoard(items);
+      allBoardPosts = items;
+      renderFilteredBoard();
     });
   }
 
-  function renderBoard(items) {
+  function renderFilteredBoard() {
+    let out = [...allBoardPosts];
+
+    const kw = boardFilterKeyword.value.trim();
+    if (kw) out = out.filter(p => p.title.includes(kw) || p.body.includes(kw));
+
+    const minLen = parseInt(boardFilterLength.value, 10);
+    if (minLen > 0) out = out.filter(p => p.body.length >= minLen);
+
+    const dateVal = boardFilterDate.value;
+    if (dateVal) {
+      const threshold = new Date(dateVal + 'T00:00:00').getTime();
+      out = out.filter(p => (p.createdAt || 0) >= threshold);
+    }
+
+    const imgVal = boardFilterImage.value;
+    if (imgVal === 'yes') out = out.filter(p => !!p.imageData);
+    if (imgVal === 'no') out = out.filter(p => !p.imageData);
+
+    // 個人設定によるミュート（この端末だけの絞り込み）
+    if (userSettings.blockedIds.length) {
+      out = out.filter(p => !userSettings.blockedIds.includes(String(p.authorDiscordId)));
+    }
+    if (userSettings.blockedKeywords.length) {
+      out = out.filter(p => !userSettings.blockedKeywords.some(kw2 =>
+        p.title.includes(kw2) || p.body.includes(kw2)
+      ));
+    }
+
+    renderBoard(out, allBoardPosts.length);
+  }
+
+  // 本文中のURLを検出し、許可ドメインだけリンク・画像として表示するHTMLを作る
+  const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+  function renderSafeBody(text) {
+    const parts = text.split(URL_REGEX);
+    return parts.map(part => {
+      if (!/^https?:\/\//.test(part)) return escapeHtml(part);
+
+      let hostname;
+      try { hostname = new URL(part).hostname; } catch { return escapeHtml(part); }
+
+      const allowed = isDomainAllowed(hostname) || userSettings.allowUnverifiedLinks;
+      if (!allowed) {
+        return `<span style="color:var(--text-dim); font-style:italic;">[未許可のリンク: ${escapeHtml(hostname)}]</span>`;
+      }
+      if (userSettings.hideLinks) {
+        return `<span style="color:var(--text-dim); font-style:italic;">[リンクは非表示設定です]</span>`;
+      }
+
+      const isImageUrl = /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(part);
+      const ytMatch = part.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{6,})/);
+      const safeHref = escapeHtml(part);
+      const linkTag = `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan);" onclick="event.stopPropagation()">${escapeHtml(part)}</a>`;
+
+      if (userSettings.hideImages) {
+        return linkTag + (isImageUrl || ytMatch ? ' <span style="color:var(--text-dim); font-style:italic;">[画像は非表示設定です]</span>' : '');
+      }
+      if (isImageUrl) {
+        return `${linkTag}<br><img src="${safeHref}" style="max-width:100%; margin-top:8px; border:1px solid var(--line);" loading="lazy">`;
+      }
+      if (ytMatch) {
+        const vid = ytMatch[1];
+        return `${linkTag}<br><a href="${safeHref}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" style="max-width:100%; margin-top:8px; border:1px solid var(--line);" loading="lazy"></a>`;
+      }
+      return `${linkTag}<br><span class="link-chip mono">🔗 ${escapeHtml(hostname)}</span>`;
+    }).join('');
+  }
+
+  function renderBoard(items, totalCount) {
     if (!items.length) {
-      boardList.innerHTML = '<div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>';
+      boardList.innerHTML = totalCount
+        ? '<div class="empty-state">条件に一致する投稿がありません。</div>'
+        : '<div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>';
       return;
     }
     boardList.innerHTML = items.map(p => {
@@ -1134,13 +1556,46 @@
 
       const bodyContent = isExpired
         ? `<div class="post-body" style="color:var(--text-dim); font-style:italic;">1ヶ月が経ったので見れません</div>`
-        : `<div class="post-body">${escapeHtml(p.body)}${p.imageData ? `<br><img src="${p.imageData}" style="max-width:100%; margin-top:10px; border:1px solid var(--line);">` : ''}</div>`;
+        : `<div class="post-body">${renderSafeBody(p.body)}${(p.imageData && !userSettings.hideImages) ? `<br><img src="${p.imageData}" style="max-width:100%; margin-top:10px; border:1px solid var(--line);">` : ''}</div>`;
 
       const adminControls = isAdmin ? `
         <div class="post-admin-row">
           <button class="btn-danger" data-action="delete" data-id="${p.id}">投稿削除</button>
           ${isAdminAuthor ? '' : `<button class="btn-warn" data-action="restrict" data-uid="${p.authorUid}">この人を投稿禁止に</button>`}
         </div>` : '';
+
+      // ---- 絵文字リアクション ----
+      const reactions = p.reactions || {};
+      const counts = {};
+      Object.values(reactions).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+      const totalReactions = Object.keys(reactions).length;
+      const myReaction = currentUser ? reactions[currentUser.uid] : null;
+      const canReact = currentUser && p.authorUid !== currentUser.uid && (totalReactions < MAX_REACTIONS || myReaction);
+
+      const chips = Object.entries(counts).map(([emoji, count]) =>
+        `<span class="reaction-chip" data-emoji="${emoji}" data-post="${p.id}">${emoji} ${count}</span>`
+      ).join('');
+
+      const addBtn = canReact
+        ? `<button class="reaction-add-btn" data-post="${p.id}">＋絵文字をつける</button>`
+        : (!currentUser ? '' : (p.authorUid === (currentUser && currentUser.uid) ? '' : '<span class="mono" style="font-size:10.5px; color:var(--text-dim);">上限に達しました</span>'));
+
+      const adminReactionDetail = isAdmin && totalReactions
+        ? `<button class="reaction-detail-btn mono" data-post="${p.id}">🛡 押した人を見る</button>
+           <div class="reaction-detail" id="reaction-detail-${p.id}" style="display:none;">
+             ${Object.values(reactions).map(r => `<div>${r.emoji} ${escapeHtml(r.name || '')}（Discord: ${escapeHtml(String(r.discordId || ''))}）</div>`).join('')}
+           </div>`
+        : '';
+
+      const reactionBar = `
+        <div class="reaction-row" data-post="${p.id}">
+          ${chips}
+          ${addBtn}
+          <div class="reaction-picker" id="reaction-picker-${p.id}" style="display:none;">
+            ${ALLOWED_REACTION_EMOJIS.map(e => `<button class="reaction-pick" data-post="${p.id}" data-pick-emoji="${e}">${e}</button>`).join('')}
+          </div>
+          ${adminReactionDetail}
+        </div>`;
 
       return `
         <div class="post-card">
@@ -1152,26 +1607,58 @@
           </div>
           <div class="post-body-wrap">
             ${bodyContent}
+            ${reactionBar}
             ${adminControls}
           </div>
         </div>`;
     }).join('');
   }
 
-  // 管理者操作（投稿削除／ユーザーを投稿禁止に）
+  // 管理者操作（投稿削除／ユーザーを投稿禁止に）／絵文字リアクション操作
   boardList.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button[data-action]');
-    if (!btn) return;
-    e.stopPropagation();
-    if (!isAdmin) return;
-
-    if (btn.dataset.action === 'delete') {
-      if (!confirm('この投稿を削除しますか？')) return;
-      await remove(ref(db, `posts/${btn.dataset.id}`));
+    const actionBtn = e.target.closest('button[data-action]');
+    if (actionBtn) {
+      e.stopPropagation();
+      if (!isAdmin) return;
+      if (actionBtn.dataset.action === 'delete') {
+        if (!confirm('この投稿を削除しますか？')) return;
+        await remove(ref(db, `posts/${actionBtn.dataset.id}`));
+      }
+      if (actionBtn.dataset.action === 'restrict') {
+        if (!confirm('このユーザーを投稿禁止（閲覧のみ）にしますか？')) return;
+        await update(ref(db, `userMeta/${actionBtn.dataset.uid}`), { restricted: true });
+      }
+      return;
     }
-    if (btn.dataset.action === 'restrict') {
-      if (!confirm('このユーザーを投稿禁止（閲覧のみ）にしますか？')) return;
-      await update(ref(db, `userMeta/${btn.dataset.uid}`), { restricted: true });
+
+    const addBtn = e.target.closest('.reaction-add-btn');
+    if (addBtn) {
+      e.stopPropagation();
+      const picker = document.getElementById(`reaction-picker-${addBtn.dataset.post}`);
+      if (picker) picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
+      return;
+    }
+
+    const pickBtn = e.target.closest('.reaction-pick');
+    if (pickBtn) {
+      e.stopPropagation();
+      if (!currentUser) return;
+      const postId = pickBtn.dataset.post;
+      const emoji = pickBtn.dataset.pickEmoji;
+      try {
+        await set(ref(db, `posts/${postId}/reactions/${currentUser.uid}`), {
+          emoji, name: currentClaims.discord_global_name || 'unknown',
+          discordId: currentClaims.discord_id, createdAt: Date.now()
+        });
+      } catch (err) { console.error(err); }
+      return;
+    }
+
+    const detailBtn = e.target.closest('.reaction-detail-btn');
+    if (detailBtn) {
+      e.stopPropagation();
+      const detail = document.getElementById(`reaction-detail-${detailBtn.dataset.post}`);
+      if (detail) detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
     }
   });
 
@@ -1222,6 +1709,58 @@
     }
     if (unbanBtn) {
       await update(ref(db, `userMeta/${unbanBtn.dataset.unban}`), { bannedUntil: null, cooldownViolations: 0 });
+    }
+  });
+
+  // ================= 管理パネル：ドメイン申請の承認/却下 =================
+  const adminDomainRequests = document.getElementById('admin-domain-requests');
+  function watchAdminDomainRequests() {
+    onValue(ref(db, 'domainRequests'), (snapshot) => {
+      const val = snapshot.val() || {};
+      const items = Object.entries(val)
+        .map(([id, v]) => ({ id, ...v }))
+        .filter(v => (v.status || 'pending') === 'pending')
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      if (!items.length) {
+        adminDomainRequests.innerHTML = '<div class="empty-state" style="padding:20px;">保留中の申請はありません。</div>';
+        return;
+      }
+
+      adminDomainRequests.innerHTML = items.map(r => {
+        const date = r.createdAt ? new Date(r.createdAt) : null;
+        const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
+        return `
+          <div class="admin-user-row" style="align-items:flex-start;">
+            <div>
+              <div class="name">${escapeHtml(r.domain)}</div>
+              <div class="flags">
+                申請者: ${escapeHtml(r.requesterName || '')}
+                ・ <a href="https://discord.com/users/${r.requesterDiscordId}" target="_blank" style="color:var(--cyan);">Discord: ${escapeHtml(String(r.requesterDiscordId || ''))}</a>
+                ・ ${dateStr}
+              </div>
+              <div class="flags" style="margin-top:6px; color:var(--text);">${escapeHtml(r.reason || '')}</div>
+            </div>
+            <div class="btns">
+              <button class="btn-primary" style="padding:6px 10px; font-size:11px;" data-approve="${r.id}" data-domain="${escapeHtml(r.domain)}">承認する</button>
+              <button class="btn-danger" data-reject="${r.id}">却下する</button>
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  adminDomainRequests.addEventListener('click', async (e) => {
+    const approveBtn = e.target.closest('button[data-approve]');
+    const rejectBtn = e.target.closest('button[data-reject]');
+    if (approveBtn) {
+      if (!confirm(`「${approveBtn.dataset.domain}」を許可ドメインに追加しますか？`)) return;
+      await push(ref(db, 'allowedDomains'), { domain: approveBtn.dataset.domain });
+      await update(ref(db, `domainRequests/${approveBtn.dataset.approve}`), { status: 'approved' });
+    }
+    if (rejectBtn) {
+      if (!confirm('この申請を却下しますか？')) return;
+      await update(ref(db, `domainRequests/${rejectBtn.dataset.reject}`), { status: 'rejected' });
     }
   });
 </script>
