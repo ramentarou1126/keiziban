@@ -186,14 +186,44 @@
     position:relative;
     background:rgba(255,255,255,0.02);
     border:1px solid var(--line);
-    padding:18px 20px;
     margin-bottom:14px;
-    display:flex;
-    gap:16px;
-    align-items:flex-start;
     transition:border-color .15s ease;
   }
   .review:hover{ border-color:rgba(79,227,193,0.35); }
+  .review-head{
+    padding:18px 20px;
+    display:flex;
+    gap:16px;
+    align-items:center;
+    cursor:pointer;
+    background:none;
+    border:none;
+    width:100%;
+    text-align:left;
+    color:inherit;
+    font:inherit;
+  }
+  .review-head:focus-visible{ outline:1px solid var(--cyan); outline-offset:-2px; }
+  .chevron{
+    margin-left:auto;
+    font-family:'JetBrains Mono', monospace;
+    color:var(--text-dim);
+    font-size:13px;
+    flex-shrink:0;
+    transition:transform .15s ease;
+  }
+  .review.open .chevron{ transform:rotate(180deg); }
+  .review-text-wrap{
+    max-height:0;
+    overflow:hidden;
+    transition:max-height .2s ease;
+  }
+  .review.open .review-text-wrap{ max-height:600px; }
+  .review-text{
+    padding:0 20px 20px 90px;
+    font-size:14px; color:#C8D2DD;
+    white-space:pre-wrap; word-break:break-word;
+  }
   .rating-node{
     flex-shrink:0;
     width:54px; height:54px;
@@ -216,20 +246,6 @@
   .review-meta{
     font-family:'JetBrains Mono', monospace; font-size:11px;
     color:var(--text-dim); white-space:nowrap;
-  }
-  .review-text{
-    margin-top:8px; font-size:14px; color:#C8D2DD;
-    white-space:pre-wrap; word-break:break-word;
-  }
-  .review-text.collapsed{
-    display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical;
-    overflow:hidden;
-  }
-  .expand-btn{
-    margin-top:8px;
-    background:none; border:none; color:var(--cyan);
-    font-family:'JetBrains Mono', monospace; font-size:11.5px;
-    cursor:pointer; padding:0; letter-spacing:.05em;
   }
   .mine-tag{
     display:inline-block;
