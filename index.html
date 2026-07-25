@@ -90,6 +90,72 @@
     letter-spacing:.08em;
   }
 
+  .tab-row{
+    display:flex; justify-content:center; gap:0;
+    margin:30px auto 0; max-width:360px;
+    border:1px solid var(--line);
+  }
+  .tab-btn{
+    flex:1;
+    background:none; border:none;
+    color:var(--text-dim);
+    font-family:'JetBrains Mono', monospace;
+    font-size:13px; letter-spacing:.03em;
+    padding:12px 10px;
+    cursor:pointer;
+    border-right:1px solid var(--line);
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab-btn:last-child{ border-right:none; }
+  .tab-btn.active{ background:rgba(79,227,193,0.1); color:var(--cyan); }
+  .tab-btn:hover{ color:var(--text); }
+
+  .board-userbar{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:22px; padding-bottom:14px;
+    border-bottom:1px solid var(--line);
+  }
+  .admin-banner{
+    text-align:center; font-size:11.5px; letter-spacing:.08em;
+    color:var(--amber); border:1px solid var(--amber);
+    padding:8px; margin-bottom:20px;
+    background:rgba(255,180,84,0.06);
+  }
+  .post-card{
+    background:rgba(255,255,255,0.02);
+    border:1px solid var(--line);
+    margin-bottom:14px;
+  }
+  .post-head{
+    padding:16px 18px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    gap:12px; cursor:pointer;
+  }
+  .post-title{ font-weight:700; font-size:15.5px; color:var(--text); }
+  .post-meta{
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    color:var(--text-dim); margin-top:4px; white-space:nowrap;
+  }
+  .post-body-wrap{ max-height:0; overflow:hidden; transition:max-height .25s ease; }
+  .post-card.open .post-body-wrap{ max-height:800px; }
+  .post-body{
+    padding:0 18px 16px; font-size:14px; color:#C8D2DD;
+    white-space:pre-wrap; word-break:break-word;
+  }
+  .post-admin-row{
+    padding:0 18px 14px; display:flex; gap:10px;
+  }
+  .btn-danger{
+    background:none; border:1px solid var(--danger); color:var(--danger);
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    padding:6px 10px; cursor:pointer;
+  }
+  .btn-warn{
+    background:none; border:1px solid var(--amber); color:var(--amber);
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    padding:6px 10px; cursor:pointer;
+  }
+
   /* HUD stat panels */
   .ledger{
     display:flex;
@@ -334,54 +400,115 @@
   <div class="eyebrow">1:2000 SCALE EARTH SIMULATION — BEDROCK EDITION</div>
   <h1 class="title"><span class="men">麺</span>Earth 掲示板</h1>
   <p class="tagline">プレイヤーからのレビューを集める場所。良いところも、改善してほしいところも。</p>
-  <div class="coords mono">SERVER STATUS: <span style="color:var(--cyan)">ONLINE</span> ・ REVIEW UPLINK v0.2</div>
+  <div class="coords mono">SERVER STATUS: <span style="color:var(--cyan)">ONLINE</span> ・ UPLINK v0.3</div>
 
-  <div class="ledger">
-    <div class="hud-panel">
-      <div class="num" id="stat-avg">–</div>
-      <div class="label">平均評価</div>
-    </div>
-    <div class="hud-panel">
-      <div class="num" id="stat-count">0</div>
-      <div class="label">レビュー数</div>
-    </div>
+  <div class="tab-row">
+    <button class="tab-btn active" id="tab-review-btn">★ レビュー</button>
+    <button class="tab-btn" id="tab-board-btn">💬 掲示板</button>
   </div>
-
-  <div class="cta-row">
-    <button class="btn-primary" id="open-modal-btn">＋ レビューを書く</button>
-  </div>
-  <div class="my-review-hint" id="my-review-hint"></div>
 </header>
 
 <div class="wrap">
-  <div class="section-label"><span>すべてのレビュー</span><div class="line"></div></div>
 
-  <div class="filters">
-    <select id="filter-range" class="mono">
-      <option value="all">評価: すべて</option>
-      <option value="4-5">★4.0〜5.0</option>
-      <option value="3-4">★3.0〜4.0未満</option>
-      <option value="2-3">★2.0〜3.0未満</option>
-      <option value="1-2">★1.0〜2.0未満</option>
-      <option value="0-1">★0〜1.0未満</option>
-    </select>
-    <select id="filter-sort" class="mono">
-      <option value="new">並び替え: 新しい順</option>
-      <option value="old">並び替え: 古い順</option>
-      <option value="high">並び替え: 評価が高い順</option>
-      <option value="low">並び替え: 評価が低い順</option>
-    </select>
-    <select id="filter-length" class="mono">
-      <option value="all">文字数: すべて</option>
-      <option value="short">〜200文字</option>
-      <option value="mid">200〜500文字</option>
-      <option value="long">500文字〜</option>
-    </select>
+  <!-- ===== レビュー タブ ===== -->
+  <div id="panel-review">
+    <div class="ledger">
+      <div class="hud-panel">
+        <div class="num" id="stat-avg">–</div>
+        <div class="label">平均評価</div>
+      </div>
+      <div class="hud-panel">
+        <div class="num" id="stat-count">0</div>
+        <div class="label">レビュー数</div>
+      </div>
+    </div>
+
+    <div class="cta-row">
+      <button class="btn-primary" id="open-modal-btn">＋ レビューを書く</button>
+    </div>
+    <div class="my-review-hint" id="my-review-hint"></div>
+
+    <div class="section-label"><span>すべてのレビュー</span><div class="line"></div></div>
+
+    <div class="filters">
+      <select id="filter-range" class="mono">
+        <option value="all">評価: すべて</option>
+        <option value="4-5">★4.0〜5.0</option>
+        <option value="3-4">★3.0〜4.0未満</option>
+        <option value="2-3">★2.0〜3.0未満</option>
+        <option value="1-2">★1.0〜2.0未満</option>
+        <option value="0-1">★0〜1.0未満</option>
+      </select>
+      <select id="filter-sort" class="mono">
+        <option value="new">並び替え: 新しい順</option>
+        <option value="old">並び替え: 古い順</option>
+        <option value="high">並び替え: 評価が高い順</option>
+        <option value="low">並び替え: 評価が低い順</option>
+      </select>
+      <select id="filter-length" class="mono">
+        <option value="all">文字数: すべて</option>
+        <option value="short">〜200文字</option>
+        <option value="mid">200〜500文字</option>
+        <option value="long">500文字〜</option>
+      </select>
+    </div>
+
+    <div id="review-list">
+      <div class="empty-state">まだレビューがありません。最初の1件を書いてみませんか？</div>
+    </div>
   </div>
 
-  <div id="review-list">
-    <div class="empty-state">まだレビューがありません。最初の1件を書いてみませんか？</div>
+  <!-- ===== 掲示板 タブ ===== -->
+  <div id="panel-board" style="display:none;">
+
+    <!-- 未ログイン -->
+    <div id="board-logged-out">
+      <div class="empty-state" style="padding:60px 20px;">
+        掲示板への投稿・閲覧にはDiscordログインが必要です。
+        <div class="cta-row" style="margin-top:20px;">
+          <button class="btn-primary" id="discord-login-btn">Discordでログイン</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ログイン済み -->
+    <div id="board-logged-in" style="display:none;">
+      <div class="board-userbar">
+        <div class="mono" id="board-username">–</div>
+        <button class="btn-ghost" id="discord-logout-btn">ログアウト</button>
+      </div>
+
+      <div id="admin-banner" style="display:none;" class="admin-banner mono">🛡 管理者モード</div>
+
+      <div class="hud-panel" style="max-width:340px; margin:0 auto 22px;">
+        <div class="num" id="post-cooldown-readout" style="font-size:14px;">投稿可能です</div>
+        <div class="label">次に投稿できるまで</div>
+      </div>
+
+      <div class="section-label"><span>新規投稿</span><div class="line"></div></div>
+
+      <div class="field">
+        <label for="p-title">タイトル</label>
+        <input type="text" id="p-title" maxlength="60" placeholder="例：新拠点の建材を募集しています">
+      </div>
+      <div class="field">
+        <label for="p-body">本文（500文字以内）</label>
+        <textarea id="p-body" maxlength="500"></textarea>
+        <div class="count"><span id="p-body-count">0</span> / 500</div>
+      </div>
+      <div class="status-msg" id="board-status-msg"></div>
+      <div class="cta-row" style="margin-top:4px;">
+        <button class="btn-primary" id="post-submit-btn">投稿する</button>
+      </div>
+
+      <div class="section-label"><span>すべての投稿</span><div class="line"></div></div>
+      <div id="board-list">
+        <div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>
+      </div>
+    </div>
+
   </div>
+
 </div>
 
 <footer>MEN EARTH SERVER — REVIEW UPLINK — PROTOTYPE BUILD</footer>
@@ -426,8 +553,11 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
-    getDatabase, ref, set, remove, onValue, serverTimestamp
+    getDatabase, ref, set, remove, update, onValue, get, serverTimestamp, push
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+  import {
+    getAuth, signInWithCustomToken, signOut, onAuthStateChanged
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCqaT20w22hlXr1hjBr2yINW6nXVx-3jI0",
@@ -441,7 +571,15 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
+  const auth = getAuth(app);
   const reviewsRef = ref(db, "reviews");
+
+  const DISCORD_WORKER_URL = "https://menearthkeiziban.hp7vvyvc25.workers.dev";
+  const ADMIN_DISCORD_ID = "1235820512752566374";
+  const POST_COOLDOWN_MS = 6 * 60 * 60 * 1000;       // 6時間
+  const SPAM_BAN_MS = 7 * 24 * 60 * 60 * 1000;       // 7日間
+  const SPAM_TRIGGER_COUNT = 4;                       // クールダウン無視の連続試行回数
+
 
   // ---------- 端末ごとのID（1人1レビューの判定に使用） ----------
   // ローカルストレージに保存したIDをそのままレビューのキーにすることで、
@@ -684,6 +822,265 @@
       ? 'この端末からは既にレビューを投稿済みです。もう一度送信すると上書きされます。'
       : '';
     render();
+  });
+
+  // ================= タブ切り替え =================
+  const tabReviewBtn = document.getElementById('tab-review-btn');
+  const tabBoardBtn = document.getElementById('tab-board-btn');
+  const panelReview = document.getElementById('panel-review');
+  const panelBoard = document.getElementById('panel-board');
+
+  tabReviewBtn.onclick = () => {
+    tabReviewBtn.classList.add('active');
+    tabBoardBtn.classList.remove('active');
+    panelReview.style.display = '';
+    panelBoard.style.display = 'none';
+  };
+  tabBoardBtn.onclick = () => {
+    tabBoardBtn.classList.add('active');
+    tabReviewBtn.classList.remove('active');
+    panelBoard.style.display = '';
+    panelReview.style.display = 'none';
+  };
+
+  // ================= 掲示板：Discordログイン =================
+  const boardLoggedOut = document.getElementById('board-logged-out');
+  const boardLoggedIn = document.getElementById('board-logged-in');
+  const boardUsername = document.getElementById('board-username');
+  const adminBanner = document.getElementById('admin-banner');
+  const discordLoginBtn = document.getElementById('discord-login-btn');
+  const discordLogoutBtn = document.getElementById('discord-logout-btn');
+  const postCooldownReadout = document.getElementById('post-cooldown-readout');
+  const pTitle = document.getElementById('p-title');
+  const pBody = document.getElementById('p-body');
+  const pBodyCount = document.getElementById('p-body-count');
+  const boardStatusMsg = document.getElementById('board-status-msg');
+  const postSubmitBtn = document.getElementById('post-submit-btn');
+  const boardList = document.getElementById('board-list');
+
+  discordLoginBtn.onclick = () => {
+    window.location.href = `${DISCORD_WORKER_URL}/login`;
+  };
+  discordLogoutBtn.onclick = () => signOut(auth);
+
+  pBody.addEventListener('input', () => { pBodyCount.textContent = pBody.value.length; });
+
+  // ページ読み込み時、Workerから戻ってきた #token=... を処理
+  (function handleAuthRedirect() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#token=')) {
+      const token = decodeURIComponent(hash.slice(7));
+      signInWithCustomToken(auth, token)
+        .then(() => {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+          tabBoardBtn.click();
+        })
+        .catch(err => console.error('ログイン失敗', err));
+    }
+  })();
+
+  let currentUser = null;
+  let currentClaims = null;
+  let isAdmin = false;
+  let cooldownTimer = null;
+
+  onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+    if (!user) {
+      boardLoggedOut.style.display = '';
+      boardLoggedIn.style.display = 'none';
+      if (cooldownTimer) clearInterval(cooldownTimer);
+      return;
+    }
+    const idTokenResult = await user.getIdTokenResult();
+    currentClaims = idTokenResult.claims;
+    isAdmin = currentClaims.discord_id === ADMIN_DISCORD_ID;
+
+    boardLoggedOut.style.display = 'none';
+    boardLoggedIn.style.display = '';
+    boardUsername.textContent = `${currentClaims.discord_global_name || 'unknown'} としてログイン中`;
+    adminBanner.style.display = isAdmin ? '' : 'none';
+
+    watchMyPostingStatus(user.uid);
+    watchBoardPosts();
+  });
+
+  // ================= 投稿クールダウン & BANチェック =================
+  function watchMyPostingStatus(uid) {
+    const metaRef = ref(db, `userMeta/${uid}`);
+    onValue(metaRef, (snap) => {
+      const meta = snap.val() || {};
+      updateCooldownUI(meta);
+    });
+  }
+
+  function updateCooldownUI(meta) {
+    if (cooldownTimer) clearInterval(cooldownTimer);
+
+    const now = Date.now();
+    if (meta.bannedUntil && meta.bannedUntil > now) {
+      postSubmitBtn.disabled = true;
+      const tick = () => {
+        const remain = meta.bannedUntil - Date.now();
+        if (remain <= 0) { clearInterval(cooldownTimer); postCooldownReadout.textContent = '投稿可能です'; postSubmitBtn.disabled = false; return; }
+        postCooldownReadout.textContent = `スパム検知によりBAN中（残り約${Math.ceil(remain / (1000*60*60*24))}日）`;
+      };
+      tick();
+      cooldownTimer = setInterval(tick, 60000);
+      return;
+    }
+
+    if (meta.restricted) {
+      postSubmitBtn.disabled = true;
+      postCooldownReadout.textContent = '管理者により閲覧のみに制限されています';
+      return;
+    }
+
+    const lastPostAt = meta.lastPostAt || 0;
+    const nextOk = lastPostAt + POST_COOLDOWN_MS;
+    if (now >= nextOk) {
+      postSubmitBtn.disabled = false;
+      postCooldownReadout.textContent = '投稿可能です';
+      return;
+    }
+
+    postSubmitBtn.disabled = true;
+    const tick = () => {
+      const remain = nextOk - Date.now();
+      if (remain <= 0) { clearInterval(cooldownTimer); postSubmitBtn.disabled = false; postCooldownReadout.textContent = '投稿可能です'; return; }
+      const h = Math.floor(remain / 3600000);
+      const m = Math.floor((remain % 3600000) / 60000);
+      postCooldownReadout.textContent = `あと ${h}時間${m}分`;
+    };
+    tick();
+    cooldownTimer = setInterval(tick, 30000);
+  }
+
+  // ================= 投稿する =================
+  postSubmitBtn.onclick = async () => {
+    if (!currentUser) return;
+    const title = pTitle.value.trim();
+    const body = pBody.value.trim();
+
+    if (!title) { showBoardStatus('タイトルを入力してください。', true); return; }
+    if (!body) { showBoardStatus('本文を入力してください。', true); return; }
+    if (body.length > 500) { showBoardStatus('本文は500文字以内にしてください。', true); return; }
+
+    postSubmitBtn.disabled = true;
+    try {
+      const metaRef = ref(db, `userMeta/${currentUser.uid}`);
+      const metaSnap = await get(metaRef);
+      const meta = metaSnap.val() || {};
+      const now = Date.now();
+
+      if (meta.bannedUntil && meta.bannedUntil > now) {
+        showBoardStatus('現在BAN中のため投稿できません。', true);
+        return;
+      }
+      if (meta.restricted) {
+        showBoardStatus('管理者により投稿が制限されています。', true);
+        return;
+      }
+
+      const lastPostAt = meta.lastPostAt || 0;
+      if (now - lastPostAt < POST_COOLDOWN_MS) {
+        // クールダウン無視の連投 = スパムの可能性としてカウント
+        const violations = (meta.cooldownViolations || 0) + 1;
+        if (violations >= SPAM_TRIGGER_COUNT) {
+          await update(metaRef, {
+            cooldownViolations: 0,
+            bannedUntil: now + SPAM_BAN_MS
+          });
+          showBoardStatus('スパムと判定されたため、7日間投稿できなくなりました。', true);
+        } else {
+          await update(metaRef, { cooldownViolations: violations });
+          showBoardStatus('投稿は6時間に1回までです。', true);
+        }
+        return;
+      }
+
+      await push(ref(db, 'posts'), {
+        title, body,
+        authorUid: currentUser.uid,
+        authorName: currentClaims.discord_global_name || 'unknown',
+        authorDiscordId: currentClaims.discord_id,
+        createdAt: now
+      });
+      await update(metaRef, { lastPostAt: now, cooldownViolations: 0 });
+
+      pTitle.value = ''; pBody.value = ''; pBodyCount.textContent = '0';
+      showBoardStatus('投稿しました！', false);
+    } catch (e) {
+      console.error(e);
+      showBoardStatus('投稿に失敗しました。', true);
+    } finally {
+      postSubmitBtn.disabled = false;
+    }
+  };
+
+  function showBoardStatus(msg, isError) {
+    boardStatusMsg.textContent = msg;
+    boardStatusMsg.className = 'status-msg ' + (isError ? 'error' : 'ok');
+  }
+
+  // ================= 投稿一覧 =================
+  let boardWatchStarted = false;
+  function watchBoardPosts() {
+    if (boardWatchStarted) return;
+    boardWatchStarted = true;
+    onValue(ref(db, 'posts'), (snapshot) => {
+      const val = snapshot.val() || {};
+      const items = Object.entries(val)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      renderBoard(items);
+    });
+  }
+
+  function renderBoard(items) {
+    if (!items.length) {
+      boardList.innerHTML = '<div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>';
+      return;
+    }
+    boardList.innerHTML = items.map(p => {
+      const date = p.createdAt ? new Date(p.createdAt) : null;
+      const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}` : '';
+      const adminControls = isAdmin ? `
+        <div class="post-admin-row">
+          <button class="btn-danger" data-action="delete" data-id="${p.id}">投稿削除</button>
+          <button class="btn-warn" data-action="restrict" data-uid="${p.authorUid}">この人を投稿禁止に</button>
+        </div>` : '';
+      return `
+        <div class="post-card">
+          <div class="post-head" onclick="this.closest('.post-card').classList.toggle('open')">
+            <div>
+              <div class="post-title">${escapeHtml(p.title)}</div>
+              <div class="post-meta">${escapeHtml(p.authorName)} ・ ${dateStr}</div>
+            </div>
+          </div>
+          <div class="post-body-wrap">
+            <div class="post-body">${escapeHtml(p.body)}</div>
+            ${adminControls}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // 管理者操作（投稿削除／ユーザーを投稿禁止に）
+  boardList.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.stopPropagation();
+    if (!isAdmin) return;
+
+    if (btn.dataset.action === 'delete') {
+      if (!confirm('この投稿を削除しますか？')) return;
+      await remove(ref(db, `posts/${btn.dataset.id}`));
+    }
+    if (btn.dataset.action === 'restrict') {
+      if (!confirm('このユーザーを投稿禁止（閲覧のみ）にしますか？')) return;
+      await update(ref(db, `userMeta/${btn.dataset.uid}`), { restricted: true });
+    }
   });
 </script>
 
