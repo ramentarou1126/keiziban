@@ -155,6 +155,17 @@
     font-family:'JetBrains Mono', monospace; font-size:11px;
     padding:6px 10px; cursor:pointer;
   }
+  .admin-user-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; border:1px solid var(--line);
+    margin-bottom:10px; gap:10px; flex-wrap:wrap;
+  }
+  .admin-user-row .name{ font-size:13.5px; }
+  .admin-user-row .flags{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px;
+    color:var(--text-dim); margin-top:2px;
+  }
+  .admin-user-row .btns{ display:flex; gap:8px; }
 
   /* HUD stat panels */
   .ledger{
@@ -479,6 +490,10 @@
       </div>
 
       <div id="admin-banner" style="display:none;" class="admin-banner mono">🛡 管理者モード</div>
+      <div id="admin-panel" style="display:none;">
+        <div class="section-label"><span>管理パネル：制限中のユーザー</span><div class="line"></div></div>
+        <div id="admin-restricted-list"></div>
+      </div>
 
       <div class="hud-panel" style="max-width:340px; margin:0 auto 22px;">
         <div class="num" id="post-cooldown-readout" style="font-size:14px;">投稿可能です</div>
@@ -496,12 +511,32 @@
         <textarea id="p-body" maxlength="500"></textarea>
         <div class="count"><span id="p-body-count">0</span> / 500</div>
       </div>
+      <div class="field">
+        <label for="p-image">画像を添付（任意・500KBまで）</label>
+        <input type="file" id="p-image" accept="image/*">
+        <div class="count" id="p-image-info"></div>
+      </div>
       <div class="status-msg" id="board-status-msg"></div>
       <div class="cta-row" style="margin-top:4px;">
         <button class="btn-primary" id="post-submit-btn">投稿する</button>
       </div>
 
       <div class="section-label"><span>すべての投稿</span><div class="line"></div></div>
+      <div class="filters">
+        <input type="text" id="board-filter-keyword" class="mono" placeholder="キーワードで検索" style="flex:1; min-width:160px;">
+        <select id="board-filter-length" class="mono">
+          <option value="0">文字数: すべて</option>
+          <option value="50">50文字以上</option>
+          <option value="100">100文字以上</option>
+          <option value="300">300文字以上</option>
+        </select>
+        <input type="date" id="board-filter-date" class="mono" title="この日以降の投稿">
+        <select id="board-filter-image" class="mono">
+          <option value="all">画像: すべて</option>
+          <option value="yes">画像あり</option>
+          <option value="no">画像なし</option>
+        </select>
+      </div>
       <div id="board-list">
         <div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>
       </div>
@@ -579,6 +614,8 @@
   const POST_COOLDOWN_MS = 6 * 60 * 60 * 1000;       // 6時間
   const SPAM_BAN_MS = 7 * 24 * 60 * 60 * 1000;       // 7日間
   const SPAM_TRIGGER_COUNT = 4;                       // クールダウン無視の連続試行回数
+  const MAX_IMAGE_BYTES = 500 * 1024;                 // 画像添付の上限
+  const POST_EXPIRE_MS = 30 * 24 * 60 * 60 * 1000;    // 投稿の閲覧期限（約1ヶ月）
 
 
   // ---------- 端末ごとのID（1人1レビューの判定に使用） ----------
@@ -854,9 +891,35 @@
   const pTitle = document.getElementById('p-title');
   const pBody = document.getElementById('p-body');
   const pBodyCount = document.getElementById('p-body-count');
+  const pImage = document.getElementById('p-image');
+  const pImageInfo = document.getElementById('p-image-info');
   const boardStatusMsg = document.getElementById('board-status-msg');
   const postSubmitBtn = document.getElementById('post-submit-btn');
   const boardList = document.getElementById('board-list');
+
+  let pendingImageDataUrl = null;
+  pImage.addEventListener('change', () => {
+    const file = pImage.files[0];
+    pendingImageDataUrl = null;
+    pImageInfo.textContent = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      pImageInfo.textContent = '画像ファイルを選択してください。';
+      pImage.value = '';
+      return;
+    }
+    if (file.size > MAX_IMAGE_BYTES) {
+      pImageInfo.textContent = `画像は500KB以内にしてください（現在: ${Math.round(file.size / 1024)}KB）`;
+      pImage.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      pendingImageDataUrl = reader.result;
+      pImageInfo.textContent = `添付: ${file.name}（${Math.round(file.size / 1024)}KB）`;
+    };
+    reader.readAsDataURL(file);
+  });
 
   discordLoginBtn.onclick = () => {
     window.location.href = `${DISCORD_WORKER_URL}/login`;
@@ -900,6 +963,8 @@
     boardLoggedIn.style.display = '';
     boardUsername.textContent = `${currentClaims.discord_global_name || 'unknown'} としてログイン中`;
     adminBanner.style.display = isAdmin ? '' : 'none';
+    document.getElementById('admin-panel').style.display = isAdmin ? '' : 'none';
+    if (isAdmin) watchAdminUserMeta();
 
     watchMyPostingStatus(user.uid);
     watchBoardPosts();
@@ -916,6 +981,12 @@
 
   function updateCooldownUI(meta) {
     if (cooldownTimer) clearInterval(cooldownTimer);
+
+    if (isAdmin) {
+      postSubmitBtn.disabled = false;
+      postCooldownReadout.textContent = '投稿可能です（管理者は無制限）';
+      return;
+    }
 
     const now = Date.now();
     if (meta.bannedUntil && meta.bannedUntil > now) {
@@ -969,46 +1040,53 @@
     postSubmitBtn.disabled = true;
     try {
       const metaRef = ref(db, `userMeta/${currentUser.uid}`);
-      const metaSnap = await get(metaRef);
-      const meta = metaSnap.val() || {};
       const now = Date.now();
 
-      if (meta.bannedUntil && meta.bannedUntil > now) {
-        showBoardStatus('現在BAN中のため投稿できません。', true);
-        return;
-      }
-      if (meta.restricted) {
-        showBoardStatus('管理者により投稿が制限されています。', true);
-        return;
-      }
+      if (!isAdmin) {
+        const metaSnap = await get(metaRef);
+        const meta = metaSnap.val() || {};
 
-      const lastPostAt = meta.lastPostAt || 0;
-      if (now - lastPostAt < POST_COOLDOWN_MS) {
-        // クールダウン無視の連投 = スパムの可能性としてカウント
-        const violations = (meta.cooldownViolations || 0) + 1;
-        if (violations >= SPAM_TRIGGER_COUNT) {
-          await update(metaRef, {
-            cooldownViolations: 0,
-            bannedUntil: now + SPAM_BAN_MS
-          });
-          showBoardStatus('スパムと判定されたため、7日間投稿できなくなりました。', true);
-        } else {
-          await update(metaRef, { cooldownViolations: violations });
-          showBoardStatus('投稿は6時間に1回までです。', true);
+        if (meta.bannedUntil && meta.bannedUntil > now) {
+          showBoardStatus('現在BAN中のため投稿できません。', true);
+          return;
         }
-        return;
+        if (meta.restricted) {
+          showBoardStatus('管理者により投稿が制限されています。', true);
+          return;
+        }
+
+        const lastPostAt = meta.lastPostAt || 0;
+        if (now - lastPostAt < POST_COOLDOWN_MS) {
+          // クールダウン無視の連投 = スパムの可能性としてカウント
+          const violations = (meta.cooldownViolations || 0) + 1;
+          if (violations >= SPAM_TRIGGER_COUNT) {
+            await update(metaRef, {
+              cooldownViolations: 0,
+              bannedUntil: now + SPAM_BAN_MS
+            });
+            showBoardStatus('スパムと判定されたため、7日間投稿できなくなりました。', true);
+          } else {
+            await update(metaRef, { cooldownViolations: violations });
+            showBoardStatus('投稿は6時間に1回までです。', true);
+          }
+          return;
+        }
       }
 
-      await push(ref(db, 'posts'), {
+      const postData = {
         title, body,
         authorUid: currentUser.uid,
         authorName: currentClaims.discord_global_name || 'unknown',
         authorDiscordId: currentClaims.discord_id,
         createdAt: now
-      });
+      };
+      if (pendingImageDataUrl) postData.imageData = pendingImageDataUrl;
+
+      await push(ref(db, 'posts'), postData);
       await update(metaRef, { lastPostAt: now, cooldownViolations: 0 });
 
       pTitle.value = ''; pBody.value = ''; pBodyCount.textContent = '0';
+      pImage.value = ''; pendingImageDataUrl = null; pImageInfo.textContent = '';
       showBoardStatus('投稿しました！', false);
     } catch (e) {
       console.error(e);
@@ -1025,6 +1103,7 @@
 
   // ================= 投稿一覧 =================
   let boardWatchStarted = false;
+  let authorNameByUid = {};
   function watchBoardPosts() {
     if (boardWatchStarted) return;
     boardWatchStarted = true;
@@ -1033,6 +1112,7 @@
       const items = Object.entries(val)
         .map(([id, v]) => ({ id, ...v }))
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      items.forEach(p => { if (p.authorUid) authorNameByUid[p.authorUid] = p.authorName; });
       renderBoard(items);
     });
   }
@@ -1045,21 +1125,33 @@
     boardList.innerHTML = items.map(p => {
       const date = p.createdAt ? new Date(p.createdAt) : null;
       const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}` : '';
+      const isAdminAuthor = p.authorDiscordId === ADMIN_DISCORD_ID;
+      const isExpired = p.createdAt && (Date.now() - p.createdAt > POST_EXPIRE_MS);
+
+      const adminMeta = isAdmin && p.authorDiscordId
+        ? ` ・ <a href="https://discord.com/users/${p.authorDiscordId}" target="_blank" style="color:var(--cyan);" onclick="event.stopPropagation()">Discord: ${p.authorDiscordId}</a>`
+        : '';
+
+      const bodyContent = isExpired
+        ? `<div class="post-body" style="color:var(--text-dim); font-style:italic;">1ヶ月が経ったので見れません</div>`
+        : `<div class="post-body">${escapeHtml(p.body)}${p.imageData ? `<br><img src="${p.imageData}" style="max-width:100%; margin-top:10px; border:1px solid var(--line);">` : ''}</div>`;
+
       const adminControls = isAdmin ? `
         <div class="post-admin-row">
           <button class="btn-danger" data-action="delete" data-id="${p.id}">投稿削除</button>
-          <button class="btn-warn" data-action="restrict" data-uid="${p.authorUid}">この人を投稿禁止に</button>
+          ${isAdminAuthor ? '' : `<button class="btn-warn" data-action="restrict" data-uid="${p.authorUid}">この人を投稿禁止に</button>`}
         </div>` : '';
+
       return `
         <div class="post-card">
           <div class="post-head" onclick="this.closest('.post-card').classList.toggle('open')">
             <div>
               <div class="post-title">${escapeHtml(p.title)}</div>
-              <div class="post-meta">${escapeHtml(p.authorName)} ・ ${dateStr}</div>
+              <div class="post-meta">${escapeHtml(p.authorName)} ・ ${dateStr}${adminMeta}</div>
             </div>
           </div>
           <div class="post-body-wrap">
-            <div class="post-body">${escapeHtml(p.body)}</div>
+            ${bodyContent}
             ${adminControls}
           </div>
         </div>`;
@@ -1080,6 +1172,56 @@
     if (btn.dataset.action === 'restrict') {
       if (!confirm('このユーザーを投稿禁止（閲覧のみ）にしますか？')) return;
       await update(ref(db, `userMeta/${btn.dataset.uid}`), { restricted: true });
+    }
+  });
+
+  // ================= 管理パネル：制限中ユーザーの解除 =================
+  const adminRestrictedList = document.getElementById('admin-restricted-list');
+
+  function watchAdminUserMeta() {
+    onValue(ref(db, 'userMeta'), (snapshot) => {
+      const val = snapshot.val() || {};
+      const now = Date.now();
+      const targets = Object.entries(val)
+        .map(([uid, meta]) => ({ uid, ...meta }))
+        .filter(m => m.restricted === true || (m.bannedUntil && m.bannedUntil > now));
+
+      if (!targets.length) {
+        adminRestrictedList.innerHTML = '<div class="empty-state" style="padding:20px;">現在、制限・BAN中のユーザーはいません。</div>';
+        return;
+      }
+
+      adminRestrictedList.innerHTML = targets.map(m => {
+        const name = authorNameByUid[m.uid] || m.uid;
+        const flags = [];
+        if (m.restricted) flags.push('投稿禁止（閲覧のみ）');
+        if (m.bannedUntil && m.bannedUntil > now) {
+          const days = Math.ceil((m.bannedUntil - now) / (1000*60*60*24));
+          flags.push(`スパムBAN（残り約${days}日）`);
+        }
+        return `
+          <div class="admin-user-row">
+            <div>
+              <div class="name">${escapeHtml(name)}</div>
+              <div class="flags">${flags.join(' / ')}</div>
+            </div>
+            <div class="btns">
+              ${m.restricted ? `<button class="btn-warn" data-unrestrict="${m.uid}">投稿禁止を解除</button>` : ''}
+              ${(m.bannedUntil && m.bannedUntil > now) ? `<button class="btn-danger" data-unban="${m.uid}">BANを解除</button>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  adminRestrictedList.addEventListener('click', async (e) => {
+    const unrestrictBtn = e.target.closest('button[data-unrestrict]');
+    const unbanBtn = e.target.closest('button[data-unban]');
+    if (unrestrictBtn) {
+      await update(ref(db, `userMeta/${unrestrictBtn.dataset.unrestrict}`), { restricted: false });
+    }
+    if (unbanBtn) {
+      await update(ref(db, `userMeta/${unbanBtn.dataset.unban}`), { bannedUntil: null, cooldownViolations: 0 });
     }
   });
 </script>
