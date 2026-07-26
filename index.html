@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -1214,6 +1213,7 @@
             </button>
             <div class="review-text-wrap">
               <div class="review-text">${escapeHtml(r.body)}</div>
+              ${isAdmin ? `<div class="post-admin-row"><button class="btn-danger" data-review-delete="${r.id}">レビュー削除</button></div>` : ''}
             </div>
           </div>`;
       }).join('');
@@ -1237,12 +1237,25 @@
     }[c]));
   }
 
-  listEl.addEventListener('click', (e) => {
+  listEl.addEventListener('click', async (e) => {
     const nameEl2 = e.target.closest('.admin-reveal-name');
     if (nameEl2) {
       e.stopPropagation();
       const id = nameEl2.dataset.discordId;
       window.open(`https://discord.com/users/${id}`, '_blank');
+      return;
+    }
+
+    const delBtn = e.target.closest('button[data-review-delete]');
+    if (delBtn) {
+      e.stopPropagation();
+      if (!isAdmin) return;
+      const reason = prompt('レビューを削除する理由を入力してください（記録として残ります）');
+      if (reason === null) return;
+      try {
+        await remove(ref(db, `reviews/${delBtn.dataset.reviewDelete}`));
+        logAdminAction('レビュー削除', `reviewId: ${delBtn.dataset.reviewDelete}`, reason);
+      } catch (err) { console.error(err); }
     }
   });
 
