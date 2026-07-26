@@ -205,6 +205,10 @@
     padding:5px 10px; cursor:pointer;
   }
   .reaction-add-btn:hover{ color:var(--cyan); border-color:var(--cyan); }
+  .reaction-remove-btn{
+    background:none; border:1px dashed var(--danger); color:var(--danger);
+    font-size:11px; padding:5px 10px; cursor:pointer;
+  }
   .reaction-picker{
     display:none; align-items:center; gap:8px; width:100%; flex-wrap:wrap;
     padding:8px; border:1px solid var(--line); margin-top:4px;
@@ -403,6 +407,11 @@
     color:var(--bg); background:var(--cyan);
     padding:2px 6px; margin-left:8px; vertical-align:middle;
   }
+  .admin-reveal-name{
+    text-decoration:underline dotted var(--amber);
+    text-underline-offset:3px; cursor:pointer;
+  }
+  .admin-reveal-name:hover{ color:var(--amber); }
   .empty-state{
     text-align:center; padding:44px 20px; color:var(--text-dim);
     font-size:13.5px; border:1px dashed var(--line);
@@ -565,6 +574,16 @@
 
       <div id="admin-banner" style="display:none;" class="admin-banner mono">🛡 管理者モード</div>
       <div id="admin-panel" style="display:none;">
+        <div class="section-label"><span>管理パネル：IDを指定して投稿禁止にする</span><div class="line"></div></div>
+        <div class="field">
+          <label for="admin-manual-id">Discord ID</label>
+          <input type="text" id="admin-manual-id" placeholder="例：123456789012345678">
+        </div>
+        <div class="status-msg" id="admin-manual-status"></div>
+        <div class="cta-row" style="margin-top:4px; margin-bottom:26px;">
+          <button class="btn-warn" id="admin-manual-restrict-btn" style="padding:10px 20px; font-size:12px;">このIDを投稿禁止（閲覧のみ）にする</button>
+        </div>
+
         <div class="section-label"><span>管理パネル：制限中のユーザー</span><div class="line"></div></div>
         <div id="admin-restricted-list"></div>
 
@@ -671,6 +690,18 @@
 </div>
 
 <footer>MEN EARTH SERVER — REVIEW UPLINK — PROTOTYPE BUILD</footer>
+
+<!-- レビュー投稿にはログインが必要 -->
+<div class="modal-overlay" id="review-login-overlay">
+  <div class="modal">
+    <h2>ログインが必要です</h2>
+    <div class="sub">レビューの投稿にはDiscordログインが必要になりました（1アカウント1件までにするためです）。表示名は自由に決められ、匿名でも投稿できます。</div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="review-login-cancel-btn">キャンセル</button>
+      <button class="btn-primary" id="review-login-btn">Discordでログイン</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL -->
 <div class="modal-overlay" id="modal-overlay">
@@ -871,25 +902,19 @@
   applyTheme();
 
 
-  // ---------- 端末ごとのID（1人1レビューの判定に使用） ----------
-  // ローカルストレージに保存したIDをそのままレビューのキーにすることで、
-  // 同じ端末・同じブラウザからの再投稿は自動的に「上書き」になる。
-  // 注意：ブラウザのデータを消したり別端末から投稿すると、別人として扱われる。
-  // 厳密に「1アカウント1件」にしたい場合は、掲示板と同じDiscordログインが必要。
-  function getDeviceId() {
-    let id = localStorage.getItem('men_earth_device_id');
-    if (!id) {
-      id = 'dev_' + crypto.randomUUID().replace(/-/g, '');
-      localStorage.setItem('men_earth_device_id', id);
-    }
-    return id;
+  // ---------- レビューの投稿にもDiscordログインが必須（1アカウント1件） ----------
+  // ログインしているDiscordアカウントのuidをそのままキーにするので、
+  // 同じアカウントからの再投稿は自動的に「上書き」になる。
+  // 表示名は自由入力（匿名可）。実際のDiscordアカウントは管理者が名前をタップした時だけ見える。
+  function getMyReviewRef() {
+    return currentUser ? ref(db, "reviews/" + currentUser.uid) : null;
   }
-  const deviceId = getDeviceId();
-  const myReviewRef = ref(db, "reviews/" + deviceId);
 
   // ---------- UI要素 ----------
   const openBtn = document.getElementById('open-modal-btn');
   const overlay = document.getElementById('modal-overlay');
+  const reviewLoginOverlay = document.getElementById('review-login-overlay');
+  const reviewLoginBtn = document.getElementById('review-login-btn');
   const cancelBtn = document.getElementById('cancel-btn');
   const submitBtn = document.getElementById('submit-btn');
   const modalTitle = document.getElementById('modal-title');
@@ -908,6 +933,8 @@
   const filterRange = document.getElementById('filter-range');
   const filterSort = document.getElementById('filter-sort');
   const filterLength = document.getElementById('filter-length');
+
+  reviewLoginBtn.onclick = () => { window.location.href = `${DISCORD_WORKER_URL}/login`; };
 
   let currentRating = 0;
   let allItems = [];
@@ -973,6 +1000,10 @@
   });
 
   openBtn.onclick = () => {
+    if (!currentUser) {
+      reviewLoginOverlay.classList.add('open');
+      return;
+    }
     overlay.classList.add('open');
     statusMsg.textContent = '';
     statusMsg.className = 'status-msg';
@@ -988,7 +1019,7 @@
       submitBtn.textContent = '更新する';
     } else {
       modalTitle.textContent = 'レビューを書く';
-      modalSub.textContent = '1人につき1件まで投稿できます。再度投稿すると、内容が上書きされます。';
+      modalSub.textContent = '1人につき1件まで投稿できます（Discordアカウント単位）。再度投稿すると、内容が上書きされます。名前は匿名にできます。';
       titleEl.value = ''; nameEl.value = ''; bodyEl.value = '';
       bodyCount.textContent = '0';
       setRating(0);
@@ -997,8 +1028,11 @@
   };
   cancelBtn.onclick = () => overlay.classList.remove('open');
   overlay.onclick = (e) => { if (e.target === overlay) overlay.classList.remove('open'); };
+  document.getElementById('review-login-cancel-btn').onclick = () => reviewLoginOverlay.classList.remove('open');
+  reviewLoginOverlay.onclick = (e) => { if (e.target === reviewLoginOverlay) reviewLoginOverlay.classList.remove('open'); };
 
   submitBtn.onclick = async () => {
+    if (!currentUser) { showStatus('ログインが必要です。', true); return; }
     const title = titleEl.value.trim();
     const name = nameEl.value.trim() || '匿名';
     const body = bodyEl.value.trim();
@@ -1010,9 +1044,10 @@
 
     submitBtn.disabled = true;
     try {
-      await set(myReviewRef, {
+      await set(getMyReviewRef(), {
         title, name, body,
         rating: currentRating,
+        authorDiscordId: currentClaims.discord_id,
         createdAt: (myReview && myReview.createdAt) ? myReview.createdAt : Date.now(),
         updatedAt: Date.now()
       });
@@ -1073,7 +1108,10 @@
       listEl.innerHTML = items.map(r => {
         const date = r.createdAt ? new Date(r.createdAt) : null;
         const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
-        const isMine = r.id === deviceId;
+        const isMine = currentUser && r.id === currentUser.uid;
+        const nameDisplay = (isAdmin && r.authorDiscordId)
+          ? `<span class="admin-reveal-name" data-discord-id="${escapeHtml(String(r.authorDiscordId))}" title="タップで本当のDiscordアカウントを表示">${escapeHtml(r.name)}</span>`
+          : escapeHtml(r.name);
         return `
           <div class="review">
             <button class="review-head" onclick="this.parentElement.classList.toggle('open')">
@@ -1081,7 +1119,7 @@
               <div class="review-body">
                 <div class="review-top">
                   <div class="review-title">${escapeHtml(r.title)}${isMine ? '<span class="mine-tag">あなたの投稿</span>' : ''}</div>
-                  <div class="review-meta">${escapeHtml(r.name)} ・ ${dateStr}</div>
+                  <div class="review-meta">${nameDisplay} ・ ${dateStr}</div>
                 </div>
               </div>
               <div class="chevron">▼</div>
@@ -1104,15 +1142,28 @@
     }[c]));
   }
 
+  listEl.addEventListener('click', (e) => {
+    const nameEl2 = e.target.closest('.admin-reveal-name');
+    if (nameEl2) {
+      e.stopPropagation();
+      const id = nameEl2.dataset.discordId;
+      window.open(`https://discord.com/users/${id}`, '_blank');
+    }
+  });
+
   onValue(reviewsRef, (snapshot) => {
     const val = snapshot.val() || {};
     allItems = Object.entries(val).map(([id, v]) => ({ id, ...v, createdAt: v.createdAt || 0 }));
-    myReview = allItems.find(r => r.id === deviceId) || null;
-    myReviewHint.textContent = myReview
-      ? 'この端末からは既にレビューを投稿済みです。もう一度送信すると上書きされます。'
-      : '';
+    refreshMyReview();
     render();
   });
+
+  function refreshMyReview() {
+    myReview = currentUser ? (allItems.find(r => r.id === currentUser.uid) || null) : null;
+    myReviewHint.textContent = myReview
+      ? 'このDiscordアカウントからは既にレビューを投稿済みです。もう一度送信すると上書きされます。'
+      : '';
+  }
 
   // ================= タブ切り替え =================
   const tabReviewBtn = document.getElementById('tab-review-btn');
@@ -1294,6 +1345,8 @@
       boardLoggedOut.style.display = '';
       boardLoggedIn.style.display = 'none';
       if (cooldownTimer) clearInterval(cooldownTimer);
+      isAdmin = false;
+      if (typeof refreshMyReview === 'function') { refreshMyReview(); render(); }
       return;
     }
     const idTokenResult = await user.getIdTokenResult();
@@ -1309,6 +1362,8 @@
 
     watchMyPostingStatus(user.uid);
     watchBoardPosts();
+    refreshMyReview();
+    render();
   });
 
   // ================= 投稿クールダウン & BANチェック =================
@@ -1596,6 +1651,10 @@
         ? `<button class="reaction-add-btn" data-post="${p.id}">＋絵文字をつける</button>`
         : (!currentUser ? '' : (isOwnPost && !isAdmin ? '' : '<span class="mono" style="font-size:10.5px; color:var(--text-dim);">上限に達しました</span>'));
 
+      const removeBtn = myReaction
+        ? `<button class="reaction-remove-btn mono" data-post="${p.id}">${myReaction.emoji} を外す</button>`
+        : '';
+
       const adminReactionDetail = isAdmin && totalReactions
         ? `<button class="reaction-detail-btn mono" data-post="${p.id}">🛡 押した人を見る</button>
            <div class="reaction-detail" id="reaction-detail-${p.id}" style="display:none;">
@@ -1607,6 +1666,7 @@
         <div class="reaction-row" data-post="${p.id}">
           ${chips}
           ${addBtn}
+          ${removeBtn}
           <div class="reaction-picker" id="reaction-picker-${p.id}" style="display:none;">
             <input type="text" class="reaction-input mono" id="reaction-input-${p.id}" maxlength="8" placeholder="絵文字を入力">
             <button class="reaction-submit-btn" data-post="${p.id}">つける</button>
@@ -1686,6 +1746,16 @@
       return;
     }
 
+    const removeBtn = e.target.closest('.reaction-remove-btn');
+    if (removeBtn) {
+      e.stopPropagation();
+      if (!currentUser) return;
+      try {
+        await remove(ref(db, `posts/${removeBtn.dataset.post}/reactions/${currentUser.uid}`));
+      } catch (err) { console.error(err); }
+      return;
+    }
+
     const detailBtn = e.target.closest('.reaction-detail-btn');
     if (detailBtn) {
       e.stopPropagation();
@@ -1696,6 +1766,29 @@
 
   // ================= 管理パネル：制限中ユーザーの解除 =================
   const adminRestrictedList = document.getElementById('admin-restricted-list');
+
+  // ================= 管理パネル：IDを指定して投稿禁止 =================
+  const adminManualId = document.getElementById('admin-manual-id');
+  const adminManualStatus = document.getElementById('admin-manual-status');
+  const adminManualRestrictBtn = document.getElementById('admin-manual-restrict-btn');
+
+  adminManualRestrictBtn.onclick = async () => {
+    const id = adminManualId.value.trim();
+    if (!id) { adminManualStatus.textContent = 'Discord IDを入力してください。'; adminManualStatus.className = 'status-msg error'; return; }
+    if (id === ADMIN_DISCORD_ID) { adminManualStatus.textContent = '管理者自身は制限できません。'; adminManualStatus.className = 'status-msg error'; return; }
+    if (!confirm(`Discord ID: ${id} を投稿禁止（閲覧のみ）にしますか？`)) return;
+
+    try {
+      await update(ref(db, `userMeta/discord:${id}`), { restricted: true });
+      adminManualStatus.textContent = '投稿禁止に設定しました。';
+      adminManualStatus.className = 'status-msg ok';
+      adminManualId.value = '';
+    } catch (e) {
+      console.error(e);
+      adminManualStatus.textContent = '設定に失敗しました。';
+      adminManualStatus.className = 'status-msg error';
+    }
+  };
 
   function watchAdminUserMeta() {
     onValue(ref(db, 'userMeta'), (snapshot) => {
