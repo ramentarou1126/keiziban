@@ -214,6 +214,41 @@
     font-size:10.5px; padding:10px 18px 4px; cursor:pointer; text-align:left;
   }
   .report-btn:hover{ color:var(--danger); }
+  .reply-btn{
+    background:none; border:none; color:var(--cyan);
+    font-size:11px; padding:10px 18px 4px; cursor:pointer; text-align:left;
+    display:block;
+  }
+  .reply-btn:hover{ text-decoration:underline; }
+
+  .thread-modal .modal{ max-width:520px; max-height:92vh; display:flex; flex-direction:column; padding:0; }
+  .thread-header{ padding:20px 22px 14px; border-bottom:1px solid var(--line); }
+  .thread-header .post-title{ font-size:16px; }
+  .thread-header .post-meta{ margin-top:4px; }
+  .thread-header .post-body{ padding:10px 0 0; font-size:13.5px; }
+  .thread-replies{ flex:1; overflow-y:auto; padding:14px 22px; }
+  .thread-reply-card{
+    border:1px solid var(--line); background:rgba(255,255,255,0.02);
+    padding:10px 12px; margin-bottom:10px;
+  }
+  .thread-reply-meta{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--text-dim);
+    display:flex; justify-content:space-between; gap:8px;
+  }
+  .thread-reply-text{ font-size:13.5px; margin-top:5px; white-space:pre-wrap; word-break:break-word; }
+  .thread-input-row{
+    display:flex; gap:8px; align-items:center;
+    padding:14px 22px; border-top:1px solid var(--line);
+  }
+  .thread-input-row input{
+    flex:1; background:var(--input-bg); color:var(--text); border:1px solid var(--line);
+    padding:10px 12px; font-size:14px;
+  }
+  .thread-send-btn{
+    background:var(--cyan); color:#04140F; border:none;
+    width:38px; height:38px; font-size:16px; cursor:pointer; flex-shrink:0;
+  }
+  .thread-send-btn:hover{ opacity:.85; }
   .reaction-picker{
     display:none; align-items:center; gap:8px; width:100%; flex-wrap:wrap;
     padding:8px; border:1px solid var(--line); margin-top:4px;
@@ -829,6 +864,21 @@
   </div>
 </div>
 
+<!-- 返信スレッドモーダル -->
+<div class="modal-overlay thread-modal" id="thread-overlay">
+  <div class="modal">
+    <div class="thread-header" id="thread-post-preview"></div>
+    <div class="thread-replies" id="thread-replies-list"></div>
+    <div class="thread-input-row">
+      <input type="text" id="thread-reply-input" maxlength="200" placeholder="面白いリプライを書き込む…">
+      <button class="thread-send-btn" id="thread-send-btn">➤</button>
+    </div>
+    <div style="text-align:right; padding:0 22px 14px;">
+      <button class="btn-ghost" id="thread-close-btn">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- 通報モーダル -->
 <div class="modal-overlay" id="report-overlay">
   <div class="modal">
@@ -1417,6 +1467,90 @@
     }
   };
 
+  // ================= 返信スレッド =================
+  const threadOverlay = document.getElementById('thread-overlay');
+  const threadPostPreview = document.getElementById('thread-post-preview');
+  const threadRepliesList = document.getElementById('thread-replies-list');
+  const threadReplyInput = document.getElementById('thread-reply-input');
+  const threadSendBtn = document.getElementById('thread-send-btn');
+  const threadCloseBtn = document.getElementById('thread-close-btn');
+  let currentThreadPostId = null;
+
+  function findPostById(id) { return allBoardPosts.find(p => p.id === id) || null; }
+
+  function renderThread() {
+    const p = findPostById(currentThreadPostId);
+    if (!p) { threadOverlay.classList.remove('open'); return; }
+
+    const date = p.createdAt ? new Date(p.createdAt) : null;
+    const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
+    threadPostPreview.innerHTML = `
+      <div class="post-title">${escapeHtml(p.title)}</div>
+      <div class="post-meta">${escapeHtml(p.authorName)} ・ ${dateStr}</div>
+      <div class="post-body">${renderSafeBody(p.body)}</div>`;
+
+    const replies = p.replies ? Object.entries(p.replies).map(([id, r]) => ({ id, ...r })) : [];
+    replies.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+    if (!replies.length) {
+      threadRepliesList.innerHTML = '<div class="empty-state" style="padding:20px;">まだ返信がありません。最初の1件を書いてみませんか？</div>';
+    } else {
+      threadRepliesList.innerHTML = replies.map(r => {
+        const rDate = r.createdAt ? new Date(r.createdAt) : null;
+        const rDateStr = rDate ? `${rDate.getFullYear()}/${String(rDate.getMonth()+1).padStart(2,'0')}/${String(rDate.getDate()).padStart(2,'0')} ${String(rDate.getHours()).padStart(2,'0')}:${String(rDate.getMinutes()).padStart(2,'0')}` : '';
+        const delBtn = isAdmin ? `<button class="btn-danger" style="font-size:10px; padding:3px 8px;" data-reply-delete="${r.id}">削除</button>` : '';
+        return `
+          <div class="thread-reply-card">
+            <div class="thread-reply-meta">
+              <span>${escapeHtml(r.authorName || '')} ・ ${rDateStr}</span>
+              ${delBtn}
+            </div>
+            <div class="thread-reply-text">${escapeHtml(r.body)}</div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  function openThread(postId) {
+    currentThreadPostId = postId;
+    threadReplyInput.value = '';
+    renderThread();
+    threadOverlay.classList.add('open');
+  }
+
+  threadCloseBtn.onclick = () => threadOverlay.classList.remove('open');
+  threadOverlay.addEventListener('click', (e) => { if (e.target === threadOverlay) threadOverlay.classList.remove('open'); });
+
+  async function sendThreadReply() {
+    if (!currentUser || !currentThreadPostId) { return; }
+    const body = threadReplyInput.value.trim();
+    if (!body) return;
+    if (body.length > 200) { alert('返信は200文字以内にしてください。'); return; }
+    try {
+      await push(ref(db, `posts/${currentThreadPostId}/replies`), {
+        body,
+        authorUid: currentUser.uid,
+        authorName: currentClaims.discord_global_name || 'unknown',
+        authorDiscordId: currentClaims.discord_id,
+        createdAt: Date.now()
+      });
+      threadReplyInput.value = '';
+    } catch (e) {
+      console.error(e);
+      alert('返信の送信に失敗しました。ログインしているか確認してください。');
+    }
+  }
+  threadSendBtn.onclick = sendThreadReply;
+  threadReplyInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendThreadReply(); });
+
+  threadRepliesList.addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('button[data-reply-delete]');
+    if (!delBtn || !isAdmin || !currentThreadPostId) return;
+    if (!confirm('この返信を削除しますか？')) return;
+    await remove(ref(db, `posts/${currentThreadPostId}/replies/${delBtn.dataset.replyDelete}`));
+    logAdminAction('返信削除', `postId: ${currentThreadPostId}`, '');
+  });
+
   // ================= 掲示板：Discordログイン =================
   const boardLoggedOut = document.getElementById('board-logged-out');
   const boardLoggedIn = document.getElementById('board-logged-in');
@@ -1699,6 +1833,7 @@
       items.forEach(p => { if (p.authorUid) authorNameByUid[p.authorUid] = p.authorName; });
       allBoardPosts = items;
       renderFilteredBoard();
+      if (currentThreadPostId && threadOverlay.classList.contains('open')) renderThread();
     });
   }
 
@@ -1802,6 +1937,9 @@
       const reportBtn = (currentUser && p.authorUid !== currentUser.uid) ?
         `<button class="report-btn mono" data-report-post="${p.id}">🚩 通報する</button>` : '';
 
+      const replyCount = p.replies ? Object.keys(p.replies).length : 0;
+      const replyBtn = `<button class="reply-btn mono" data-open-thread="${p.id}">💬 返信（${replyCount}）</button>`;
+
       // ---- 絵文字リアクション ----
       const reactions = p.reactions || {};
       const counts = {};
@@ -1854,6 +1992,7 @@
           <div class="post-body-wrap">
             ${bodyContent}
             ${reactionBar}
+            ${replyBtn}
             ${reportBtn}
             ${adminControls}
           </div>
@@ -1871,6 +2010,13 @@
 
   // 管理者操作（投稿削除／ユーザーを投稿禁止に）／絵文字リアクション操作
   boardList.addEventListener('click', async (e) => {
+    const threadBtn = e.target.closest('button[data-open-thread]');
+    if (threadBtn) {
+      e.stopPropagation();
+      openThread(threadBtn.dataset.openThread);
+      return;
+    }
+
     const reportBtn = e.target.closest('button[data-report-post]');
     if (reportBtn) {
       e.stopPropagation();
