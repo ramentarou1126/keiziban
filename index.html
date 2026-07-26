@@ -18,6 +18,7 @@
     --text-dim:#7C8CA0;
     --line:rgba(120,150,180,0.16);
     --danger:#FF6B6B;
+    --input-bg:#050810;
   }
   body.theme-light{
     --bg:#F4F6F8;
@@ -26,6 +27,7 @@
     --text:#171C24;
     --text-dim:#5B6675;
     --line:rgba(20,40,60,0.14);
+    --input-bg:#FFFFFF;
   }
   body.theme-light .review-text, body.theme-light .post-body, body.theme-light .terms-body{ color:#2A323D; }
   *{box-sizing:border-box;}
@@ -204,14 +206,19 @@
   }
   .reaction-add-btn:hover{ color:var(--cyan); border-color:var(--cyan); }
   .reaction-picker{
-    display:none; flex-wrap:wrap; gap:4px; width:100%;
+    display:none; align-items:center; gap:8px; width:100%; flex-wrap:wrap;
     padding:8px; border:1px solid var(--line); margin-top:4px;
   }
-  .reaction-pick{
-    background:none; border:1px solid transparent; font-size:18px;
-    cursor:pointer; padding:4px 6px;
+  .reaction-input{
+    background:var(--input-bg); color:var(--text); border:1px solid var(--line);
+    padding:6px 8px; font-size:15px; width:100px;
   }
-  .reaction-pick:hover{ border-color:var(--cyan); }
+  .reaction-submit-btn{
+    background:none; border:1px solid var(--cyan); color:var(--cyan);
+    font-family:'JetBrains Mono', monospace; font-size:11px;
+    padding:6px 10px; cursor:pointer;
+  }
+  .reaction-input-msg{ font-size:10.5px; color:var(--danger); width:100%; }
   .reaction-detail-btn{
     background:none; border:none; color:var(--text-dim); font-size:10.5px;
     cursor:pointer; padding:0; width:100%; text-align:left; margin-top:4px;
@@ -435,7 +442,7 @@
     font-family:'Noto Sans JP', sans-serif;
     font-size:14px;
     border:1px solid var(--line);
-    background:#050810;
+    background:var(--input-bg);
     color:var(--text);
     padding:10px 11px;
     resize:vertical;
@@ -710,7 +717,7 @@
 
     <div class="field">
       <label>テーマ</label>
-      <select id="setting-theme" class="mono" style="width:100%; background:#050810; color:var(--text); border:1px solid var(--line); padding:10px;">
+      <select id="setting-theme" class="mono" style="width:100%; background:var(--input-bg); color:var(--text); border:1px solid var(--line); padding:10px;">
         <option value="dark">黒寄り（ダーク）</option>
         <option value="light">白寄り（ライト）</option>
       </select>
@@ -802,8 +809,16 @@
   const MAX_REACTIONS = 20;                           // 1投稿あたりの絵文字リアクション上限
   const MIN_ACCOUNT_AGE_MS = 3 * 24 * 60 * 60 * 1000; // BOT対策：作成から3日未満のDiscordアカウントは投稿不可
 
-  // リアクションとして選べる絵文字（不快な絵文字は最初から選択肢に含めていません）
-  const ALLOWED_REACTION_EMOJIS = ['👍','❤️','😂','🎉','😮','😢','🔥','👏','🙌','😍','🤔','👌'];
+  // リアクションとして「使えない」絵文字（これ以外は自由に選べます）
+  const BLOCKED_REACTION_EMOJIS = [
+    '🤪','🤡','🙄','💅','🤏','🥱','💩','🤫','🤓','🙃','🤣','🤨','😌','🤷','🤦','🧐',
+    '🖕','🖕🏻','🖕🏽','🖕🏿','😒','👎','🫵','🖕🏼','🖕🏾','🤮','🤢','🍆','🍑','💦','🍌','🍒',
+    '🌮','🍩','🌊','🥖','🌭','🥛','🈲','🔞','👅','🤤','🥞','🕯️','⛓️','🛏️','🔪','🗡️',
+    '🔫','💣','🧨','🩸','☠️','💀','⚰️','🪦','🪓','⚔️','💉','🥊','💥','⚡','👺','👹',
+    '🧠','💊','🌿','🍁','🍄','🚬','🍷','♿','🐒','🐵','🐖','🐷','🤬','👿','😈','🪰',
+    '🪳','🪱','🗑️','🚮','❌','⛔','🤔'
+  ];
+  const EMOJI_ONLY_REGEX = /^(\p{Extended_Pictographic}(\uFE0F|\u200D\p{Extended_Pictographic}|[\u{1F3FB}-\u{1F3FF}])*){1,3}$/u;
 
   // 最初から許可されているドメイン（大文字小文字・www有無を無視して判定）
   const PRE_APPROVED_DOMAINS = [
@@ -1570,7 +1585,8 @@
       Object.values(reactions).forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
       const totalReactions = Object.keys(reactions).length;
       const myReaction = currentUser ? reactions[currentUser.uid] : null;
-      const canReact = currentUser && p.authorUid !== currentUser.uid && (totalReactions < MAX_REACTIONS || myReaction);
+      const isOwnPost = currentUser && p.authorUid === currentUser.uid;
+      const canReact = currentUser && (isAdmin || !isOwnPost) && (totalReactions < MAX_REACTIONS || myReaction);
 
       const chips = Object.entries(counts).map(([emoji, count]) =>
         `<span class="reaction-chip" data-emoji="${emoji}" data-post="${p.id}">${emoji} ${count}</span>`
@@ -1578,7 +1594,7 @@
 
       const addBtn = canReact
         ? `<button class="reaction-add-btn" data-post="${p.id}">＋絵文字をつける</button>`
-        : (!currentUser ? '' : (p.authorUid === (currentUser && currentUser.uid) ? '' : '<span class="mono" style="font-size:10.5px; color:var(--text-dim);">上限に達しました</span>'));
+        : (!currentUser ? '' : (isOwnPost && !isAdmin ? '' : '<span class="mono" style="font-size:10.5px; color:var(--text-dim);">上限に達しました</span>'));
 
       const adminReactionDetail = isAdmin && totalReactions
         ? `<button class="reaction-detail-btn mono" data-post="${p.id}">🛡 押した人を見る</button>
@@ -1592,7 +1608,9 @@
           ${chips}
           ${addBtn}
           <div class="reaction-picker" id="reaction-picker-${p.id}" style="display:none;">
-            ${ALLOWED_REACTION_EMOJIS.map(e => `<button class="reaction-pick" data-post="${p.id}" data-pick-emoji="${e}">${e}</button>`).join('')}
+            <input type="text" class="reaction-input mono" id="reaction-input-${p.id}" maxlength="8" placeholder="絵文字を入力">
+            <button class="reaction-submit-btn" data-post="${p.id}">つける</button>
+            <div class="reaction-input-msg mono" id="reaction-input-msg-${p.id}"></div>
           </div>
           ${adminReactionDetail}
         </div>`;
@@ -1639,18 +1657,32 @@
       return;
     }
 
-    const pickBtn = e.target.closest('.reaction-pick');
-    if (pickBtn) {
+    const submitBtn = e.target.closest('.reaction-submit-btn');
+    if (submitBtn) {
       e.stopPropagation();
       if (!currentUser) return;
-      const postId = pickBtn.dataset.post;
-      const emoji = pickBtn.dataset.pickEmoji;
+      const postId = submitBtn.dataset.post;
+      const input = document.getElementById(`reaction-input-${postId}`);
+      const msgEl = document.getElementById(`reaction-input-msg-${postId}`);
+      const val = (input.value || '').trim();
+
+      if (!val) { msgEl.textContent = '絵文字を入力してください。'; return; }
+      if (!EMOJI_ONLY_REGEX.test(val)) { msgEl.textContent = '絵文字だけを入力してください。'; return; }
+      if (BLOCKED_REACTION_EMOJIS.some(b => val.includes(b))) {
+        msgEl.textContent = 'この絵文字は使用できません。';
+        return;
+      }
+
       try {
         await set(ref(db, `posts/${postId}/reactions/${currentUser.uid}`), {
-          emoji, name: currentClaims.discord_global_name || 'unknown',
+          emoji: val, name: currentClaims.discord_global_name || 'unknown',
           discordId: currentClaims.discord_id, createdAt: Date.now()
         });
-      } catch (err) { console.error(err); }
+        input.value = ''; msgEl.textContent = '';
+      } catch (err) {
+        console.error(err);
+        msgEl.textContent = '追加に失敗しました。';
+      }
       return;
     }
 
