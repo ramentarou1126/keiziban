@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -530,6 +531,7 @@
     <div class="section-label"><span>すべてのレビュー</span><div class="line"></div></div>
 
     <div class="filters">
+      <input type="text" id="filter-keyword" class="mono" placeholder="キーワードで検索" style="flex:1; min-width:160px;">
       <select id="filter-range" class="mono">
         <option value="all">評価: すべて</option>
         <option value="4-5">★4.0〜5.0</option>
@@ -579,6 +581,17 @@
 
       <div id="admin-banner" style="display:none;" class="admin-banner mono">🛡 管理者モード</div>
       <div id="admin-panel" style="display:none;">
+        <div class="section-label"><span>管理パネル：管理者を追加</span><div class="line"></div></div>
+        <div class="field">
+          <label for="admin-add-id">Discord ID</label>
+          <input type="text" id="admin-add-id" placeholder="例：123456789012345678">
+        </div>
+        <div class="status-msg" id="admin-add-status"></div>
+        <div class="cta-row" style="margin-top:4px; margin-bottom:14px;">
+          <button class="btn-primary" id="admin-add-btn" style="padding:10px 20px; font-size:12px;">このIDを管理者に追加</button>
+        </div>
+        <div id="admin-list-display" class="mono" style="font-size:11px; color:var(--text-dim); margin-bottom:26px;"></div>
+
         <div class="section-label"><span>管理パネル：IDを指定して投稿禁止にする</span><div class="line"></div></div>
         <div class="field">
           <label for="admin-manual-id">Discord ID</label>
@@ -859,7 +872,7 @@
   const app = initializeApp(firebaseConfig);
 
   // App Check（reCAPTCHA v3）。サイトキーはFirebaseコンソール → App Check で取得したものに置き換えてください。
-  const APP_CHECK_SITE_KEY = "PASTE_YOUR_RECAPTCHA_V3_SITE_KEY_HERE";
+  const APP_CHECK_SITE_KEY = "6Len5mUtAAAAAMN_cBQQrepTFlsbQadzxm016GsZ";
   if (APP_CHECK_SITE_KEY && !APP_CHECK_SITE_KEY.startsWith('PASTE_')) {
     initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
@@ -872,7 +885,18 @@
   const reviewsRef = ref(db, "reviews");
 
   const DISCORD_WORKER_URL = "https://menearthkeiziban.hp7vvyvc25.workers.dev";
-  const ADMIN_DISCORD_ID = "1235820512752566374";
+  const ADMIN_DISCORD_ID = "1235820512752566374"; // 最初の管理者（この人だけは他の管理者からも除外・制限できません）
+  let adminIdsList = [ADMIN_DISCORD_ID];
+  onValue(ref(db, 'admins'), (snap) => {
+    const val = snap.val() || {};
+    const ids = Object.keys(val).filter(k => val[k] === true);
+    adminIdsList = ids.length ? ids : [ADMIN_DISCORD_ID];
+    if (currentClaims) {
+      isAdmin = adminIdsList.includes(currentClaims.discord_id);
+      applyAdminUI();
+    }
+    if (typeof renderAdminListDisplay === 'function') renderAdminListDisplay();
+  });
   const POST_COOLDOWN_MS = 6 * 60 * 60 * 1000;       // 6時間
   const SPAM_BAN_MS = 7 * 24 * 60 * 60 * 1000;       // 7日間
   const SPAM_TRIGGER_COUNT = 4;                       // クールダウン無視の連続試行回数
@@ -985,6 +1009,7 @@
   const statAvg = document.getElementById('stat-avg');
   const statCount = document.getElementById('stat-count');
   const myReviewHint = document.getElementById('my-review-hint');
+  const filterKeyword = document.getElementById('filter-keyword');
   const filterRange = document.getElementById('filter-range');
   const filterSort = document.getElementById('filter-sort');
   const filterLength = document.getElementById('filter-length');
@@ -994,6 +1019,7 @@
   let currentRating = 0;
   let allItems = [];
   let myReview = null;
+  let reviewVisibleCount = 10;
 
   // 星（0.5刻み）
   for (let i = 1; i <= 5; i++) {
@@ -1122,10 +1148,16 @@
   }
 
   // ---------- フィルター ----------
-  [filterRange, filterSort, filterLength].forEach(el => el.addEventListener('change', () => render()));
+  [filterKeyword, filterRange, filterSort, filterLength].forEach(el => {
+    el.addEventListener('input', () => { reviewVisibleCount = 10; render(); });
+    el.addEventListener('change', () => { reviewVisibleCount = 10; render(); });
+  });
 
   function applyFilters(items) {
     let out = [...items];
+
+    const kw = filterKeyword.value.trim();
+    if (kw) out = out.filter(r => r.title.includes(kw) || r.body.includes(kw) || r.name.includes(kw));
 
     const range = filterRange.value;
     if (range !== 'all') {
@@ -1160,7 +1192,8 @@
     if (!items.length) {
       listEl.innerHTML = '<div class="empty-state">条件に一致するレビューがありません。</div>';
     } else {
-      listEl.innerHTML = items.map(r => {
+      const visible = items.slice(0, reviewVisibleCount);
+      listEl.innerHTML = visible.map(r => {
         const date = r.createdAt ? new Date(r.createdAt) : null;
         const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
         const isMine = currentUser && r.id === currentUser.uid;
@@ -1184,6 +1217,13 @@
             </div>
           </div>`;
       }).join('');
+      if (items.length > reviewVisibleCount) {
+        listEl.innerHTML += `<div class="cta-row"><button class="btn-ghost" id="review-load-more-btn">もっと見る（残り${items.length - reviewVisibleCount}件）</button></div>`;
+        document.getElementById('review-load-more-btn').onclick = () => {
+          reviewVisibleCount += 10;
+          render();
+        };
+      }
     }
 
     const avg = allItems.reduce((s, r) => s + r.rating, 0) / allItems.length;
@@ -1431,6 +1471,19 @@
   let isAdmin = false;
   let cooldownTimer = null;
 
+  let adminWatchersStarted = false;
+  function applyAdminUI() {
+    if (!currentUser) return;
+    adminBanner.style.display = isAdmin ? '' : 'none';
+    document.getElementById('admin-panel').style.display = isAdmin ? '' : 'none';
+    if (isAdmin && !adminWatchersStarted) {
+      adminWatchersStarted = true;
+      watchAdminUserMeta(); watchAdminDomainRequests(); watchAdminReports(); watchAdminLogs();
+    }
+    render();
+    if (typeof renderFilteredBoard === 'function') renderFilteredBoard();
+  }
+
   onAuthStateChanged(auth, async (user) => {
     currentUser = user;
     if (!user) {
@@ -1443,14 +1496,12 @@
     }
     const idTokenResult = await user.getIdTokenResult();
     currentClaims = idTokenResult.claims;
-    isAdmin = currentClaims.discord_id === ADMIN_DISCORD_ID;
+    isAdmin = adminIdsList.includes(currentClaims.discord_id);
 
     boardLoggedOut.style.display = 'none';
     boardLoggedIn.style.display = '';
     boardUsername.textContent = `${currentClaims.discord_global_name || 'unknown'} としてログイン中`;
-    adminBanner.style.display = isAdmin ? '' : 'none';
-    document.getElementById('admin-panel').style.display = isAdmin ? '' : 'none';
-    if (isAdmin) { watchAdminUserMeta(); watchAdminDomainRequests(); watchAdminReports(); watchAdminLogs(); }
+    applyAdminUI();
 
     watchMyPostingStatus(user.uid);
     watchBoardPosts();
@@ -1613,14 +1664,15 @@
   let boardWatchStarted = false;
   let authorNameByUid = {};
   let allBoardPosts = [];
+  let boardVisibleCount = 10;
 
   const boardFilterKeyword = document.getElementById('board-filter-keyword');
   const boardFilterLength = document.getElementById('board-filter-length');
   const boardFilterDate = document.getElementById('board-filter-date');
   const boardFilterImage = document.getElementById('board-filter-image');
   [boardFilterKeyword, boardFilterLength, boardFilterDate, boardFilterImage].forEach(el => {
-    el.addEventListener('input', renderFilteredBoard);
-    el.addEventListener('change', renderFilteredBoard);
+    el.addEventListener('input', () => { boardVisibleCount = 10; renderFilteredBoard(); });
+    el.addEventListener('change', () => { boardVisibleCount = 10; renderFilteredBoard(); });
   });
 
   function watchBoardPosts() {
@@ -1713,10 +1765,11 @@
         : '<div class="empty-state">まだ投稿がありません。最初の1件を書いてみませんか？</div>';
       return;
     }
-    boardList.innerHTML = items.map(p => {
+    const visibleItems = items.slice(0, boardVisibleCount);
+    boardList.innerHTML = visibleItems.map(p => {
       const date = p.createdAt ? new Date(p.createdAt) : null;
       const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}` : '';
-      const isAdminAuthor = p.authorDiscordId === ADMIN_DISCORD_ID;
+      const isAdminAuthor = adminIdsList.includes(p.authorDiscordId);
       const isExpired = p.createdAt && (Date.now() - p.createdAt > POST_EXPIRE_MS);
 
       const adminMeta = isAdmin && p.authorDiscordId
@@ -1793,6 +1846,14 @@
           </div>
         </div>`;
     }).join('');
+
+    if (items.length > boardVisibleCount) {
+      boardList.innerHTML += `<div class="cta-row"><button class="btn-ghost" id="board-load-more-btn">もっと見る（残り${items.length - boardVisibleCount}件）</button></div>`;
+      document.getElementById('board-load-more-btn').onclick = () => {
+        boardVisibleCount += 10;
+        renderFilteredBoard();
+      };
+    }
   }
 
   // 管理者操作（投稿削除／ユーザーを投稿禁止に）／絵文字リアクション操作
@@ -1889,10 +1950,41 @@
   const adminManualStatus = document.getElementById('admin-manual-status');
   const adminManualRestrictBtn = document.getElementById('admin-manual-restrict-btn');
 
+  // ================= 管理パネル：管理者を追加 =================
+  const adminAddId = document.getElementById('admin-add-id');
+  const adminAddStatus = document.getElementById('admin-add-status');
+  const adminAddBtn = document.getElementById('admin-add-btn');
+  const adminListDisplay = document.getElementById('admin-list-display');
+
+  function renderAdminListDisplay() {
+    adminListDisplay.innerHTML = '現在の管理者: ' + adminIdsList.map(id =>
+      `<a href="https://discord.com/users/${id}" target="_blank" style="color:var(--cyan);">${escapeHtml(id)}</a>`
+    ).join(', ');
+  }
+
+  adminAddBtn.onclick = async () => {
+    const id = adminAddId.value.trim();
+    if (!id) { adminAddStatus.textContent = 'Discord IDを入力してください。'; adminAddStatus.className = 'status-msg error'; return; }
+    if (adminIdsList.includes(id)) { adminAddStatus.textContent = 'すでに管理者です。'; adminAddStatus.className = 'status-msg error'; return; }
+    if (!confirm(`Discord ID: ${id} を管理者に追加しますか？投稿削除・BANなど強い権限を持つことになります。`)) return;
+
+    try {
+      await set(ref(db, `admins/${id}`), true);
+      logAdminAction('管理者追加', `discordId: ${id}`, '');
+      adminAddStatus.textContent = '管理者に追加しました。';
+      adminAddStatus.className = 'status-msg ok';
+      adminAddId.value = '';
+    } catch (e) {
+      console.error(e);
+      adminAddStatus.textContent = '追加に失敗しました。';
+      adminAddStatus.className = 'status-msg error';
+    }
+  };
+
   adminManualRestrictBtn.onclick = async () => {
     const id = adminManualId.value.trim();
     if (!id) { adminManualStatus.textContent = 'Discord IDを入力してください。'; adminManualStatus.className = 'status-msg error'; return; }
-    if (id === ADMIN_DISCORD_ID) { adminManualStatus.textContent = '管理者自身は制限できません。'; adminManualStatus.className = 'status-msg error'; return; }
+    if (adminIdsList.includes(id)) { adminManualStatus.textContent = '管理者は制限できません。'; adminManualStatus.className = 'status-msg error'; return; }
     const reason = prompt('投稿禁止にする理由を入力してください（必須・記録として残ります）');
     if (!reason || !reason.trim()) { adminManualStatus.textContent = '理由の入力が必要です。'; adminManualStatus.className = 'status-msg error'; return; }
 
