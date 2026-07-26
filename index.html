@@ -1498,7 +1498,8 @@
       threadRepliesList.innerHTML = replies.map(r => {
         const rDate = r.createdAt ? new Date(r.createdAt) : null;
         const rDateStr = rDate ? `${rDate.getFullYear()}/${String(rDate.getMonth()+1).padStart(2,'0')}/${String(rDate.getDate()).padStart(2,'0')} ${String(rDate.getHours()).padStart(2,'0')}:${String(rDate.getMinutes()).padStart(2,'0')}` : '';
-        const delBtn = isAdmin ? `<button class="btn-danger" style="font-size:10px; padding:3px 8px;" data-reply-delete="${r.id}">削除</button>` : '';
+        const canDeleteReply = isAdmin || (currentUser && (r.authorUid === currentUser.uid || p.authorUid === currentUser.uid));
+        const delBtn = canDeleteReply ? `<button class="btn-danger" style="font-size:10px; padding:3px 8px;" data-reply-delete="${r.id}">削除</button>` : '';
         return `
           <div class="thread-reply-card">
             <div class="thread-reply-meta">
@@ -1521,11 +1522,17 @@
   threadCloseBtn.onclick = () => threadOverlay.classList.remove('open');
   threadOverlay.addEventListener('click', (e) => { if (e.target === threadOverlay) threadOverlay.classList.remove('open'); });
 
+  let lastReplySentAt = 0;
   async function sendThreadReply() {
     if (!currentUser || !currentThreadPostId) { return; }
     const body = threadReplyInput.value.trim();
     if (!body) return;
     if (body.length > 200) { alert('返信は200文字以内にしてください。'); return; }
+    if (!isAdmin && Date.now() - lastReplySentAt < 10000) {
+      alert('連続投稿はできません。少し間隔をあけてください。');
+      return;
+    }
+    threadSendBtn.disabled = true;
     try {
       await push(ref(db, `posts/${currentThreadPostId}/replies`), {
         body,
@@ -1534,10 +1541,14 @@
         authorDiscordId: currentClaims.discord_id,
         createdAt: Date.now()
       });
+      await update(ref(db, `userMeta/${currentUser.uid}`), { lastReplyAt: Date.now() });
+      lastReplySentAt = Date.now();
       threadReplyInput.value = '';
     } catch (e) {
       console.error(e);
-      alert('返信の送信に失敗しました。ログインしているか確認してください。');
+      alert('返信の送信に失敗しました。少し間隔をあけて再度お試しください。');
+    } finally {
+      threadSendBtn.disabled = false;
     }
   }
   threadSendBtn.onclick = sendThreadReply;
@@ -1545,10 +1556,10 @@
 
   threadRepliesList.addEventListener('click', async (e) => {
     const delBtn = e.target.closest('button[data-reply-delete]');
-    if (!delBtn || !isAdmin || !currentThreadPostId) return;
+    if (!delBtn || !currentThreadPostId) return;
     if (!confirm('この返信を削除しますか？')) return;
     await remove(ref(db, `posts/${currentThreadPostId}/replies/${delBtn.dataset.replyDelete}`));
-    logAdminAction('返信削除', `postId: ${currentThreadPostId}`, '');
+    if (isAdmin) logAdminAction('返信削除', `postId: ${currentThreadPostId}`, '');
   });
 
   // ================= 掲示板：Discordログイン =================
