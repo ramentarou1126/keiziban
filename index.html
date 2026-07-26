@@ -209,6 +209,11 @@
     background:none; border:1px dashed var(--danger); color:var(--danger);
     font-size:11px; padding:5px 10px; cursor:pointer;
   }
+  .report-btn{
+    background:none; border:none; color:var(--text-dim);
+    font-size:10.5px; padding:10px 18px 4px; cursor:pointer; text-align:left;
+  }
+  .report-btn:hover{ color:var(--danger); }
   .reaction-picker{
     display:none; align-items:center; gap:8px; width:100%; flex-wrap:wrap;
     padding:8px; border:1px solid var(--line); margin-top:4px;
@@ -589,6 +594,12 @@
 
         <div class="section-label"><span>管理パネル：ドメイン申請</span><div class="line"></div></div>
         <div id="admin-domain-requests"></div>
+
+        <div class="section-label"><span>管理パネル：通報一覧</span><div class="line"></div></div>
+        <div id="admin-reports-list"></div>
+
+        <div class="section-label"><span>管理パネル：操作ログ</span><div class="line"></div></div>
+        <div id="admin-logs-list"></div>
       </div>
 
       <div class="hud-panel" style="max-width:340px; margin:0 auto 22px;">
@@ -806,6 +817,23 @@
   </div>
 </div>
 
+<!-- 通報モーダル -->
+<div class="modal-overlay" id="report-overlay">
+  <div class="modal">
+    <h2>投稿を通報する</h2>
+    <div class="sub">通報内容は管理者だけが確認します。</div>
+    <div class="field">
+      <label for="report-reason">理由（任意）</label>
+      <textarea id="report-reason" maxlength="300" placeholder="例：規約に反する内容が含まれています"></textarea>
+    </div>
+    <div class="status-msg" id="report-status-msg"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="report-cancel-btn">キャンセル</button>
+      <button class="btn-primary" id="report-submit-btn">通報する</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import {
@@ -814,6 +842,9 @@
   import {
     getAuth, signInWithCustomToken, signOut, onAuthStateChanged
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    initializeAppCheck, ReCaptchaV3Provider
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCqaT20w22hlXr1hjBr2yINW6nXVx-3jI0",
@@ -826,6 +857,16 @@
   };
 
   const app = initializeApp(firebaseConfig);
+
+  // App Check（reCAPTCHA v3）。サイトキーはFirebaseコンソール → App Check で取得したものに置き換えてください。
+  const APP_CHECK_SITE_KEY = "PASTE_YOUR_RECAPTCHA_V3_SITE_KEY_HERE";
+  if (APP_CHECK_SITE_KEY && !APP_CHECK_SITE_KEY.startsWith('PASTE_')) {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  }
+
   const db = getDatabase(app);
   const auth = getAuth(app);
   const reviewsRef = ref(db, "reviews");
@@ -875,6 +916,20 @@
     const val = snap.val() || {};
     dynamicAllowedDomains = Object.values(val).map(v => v.domain).filter(Boolean);
   });
+
+  // ================= 管理者操作ログ =================
+  async function logAdminAction(action, targetLabel, reason) {
+    try {
+      await push(ref(db, 'adminLogs'), {
+        action,
+        target: targetLabel,
+        reason: reason || '',
+        adminName: (currentClaims && currentClaims.discord_global_name) || 'system',
+        adminDiscordId: (currentClaims && currentClaims.discord_id) || 'system',
+        createdAt: Date.now()
+      });
+    } catch (e) { console.error('ログ記録に失敗', e); }
+  }
 
   // ================= 個人設定（この端末だけに保存） =================
   const DEFAULT_SETTINGS = {
@@ -1272,6 +1327,43 @@
     }
   };
 
+  // ================= 通報モーダル =================
+  const reportOverlay = document.getElementById('report-overlay');
+  const reportReason = document.getElementById('report-reason');
+  const reportStatusMsg = document.getElementById('report-status-msg');
+  const reportCancelBtn = document.getElementById('report-cancel-btn');
+  const reportSubmitBtn = document.getElementById('report-submit-btn');
+  let reportTargetPostId = null;
+
+  reportCancelBtn.onclick = () => reportOverlay.classList.remove('open');
+  reportOverlay.onclick = (e) => { if (e.target === reportOverlay) reportOverlay.classList.remove('open'); };
+
+  reportSubmitBtn.onclick = async () => {
+    if (!currentUser || !reportTargetPostId) return;
+    reportSubmitBtn.disabled = true;
+    try {
+      await push(ref(db, 'reports'), {
+        targetType: 'post',
+        targetId: reportTargetPostId,
+        reason: reportReason.value.trim(),
+        reporterUid: currentUser.uid,
+        reporterDiscordId: currentClaims.discord_id,
+        reporterName: currentClaims.discord_global_name || 'unknown',
+        createdAt: Date.now(),
+        status: 'pending'
+      });
+      reportStatusMsg.textContent = '通報しました。';
+      reportStatusMsg.className = 'status-msg ok';
+      setTimeout(() => { reportOverlay.classList.remove('open'); reportStatusMsg.textContent = ''; }, 800);
+    } catch (e) {
+      console.error(e);
+      reportStatusMsg.textContent = '通報に失敗しました。';
+      reportStatusMsg.className = 'status-msg error';
+    } finally {
+      reportSubmitBtn.disabled = false;
+    }
+  };
+
   // ================= 掲示板：Discordログイン =================
   const boardLoggedOut = document.getElementById('board-logged-out');
   const boardLoggedIn = document.getElementById('board-logged-in');
@@ -1358,7 +1450,7 @@
     boardUsername.textContent = `${currentClaims.discord_global_name || 'unknown'} としてログイン中`;
     adminBanner.style.display = isAdmin ? '' : 'none';
     document.getElementById('admin-panel').style.display = isAdmin ? '' : 'none';
-    if (isAdmin) { watchAdminUserMeta(); watchAdminDomainRequests(); }
+    if (isAdmin) { watchAdminUserMeta(); watchAdminDomainRequests(); watchAdminReports(); watchAdminLogs(); }
 
     watchMyPostingStatus(user.uid);
     watchBoardPosts();
@@ -1473,6 +1565,13 @@
               cooldownViolations: 0,
               bannedUntil: now + SPAM_BAN_MS
             });
+            try {
+              await push(ref(db, 'adminLogs'), {
+                action: '自動BAN', target: `uid: ${currentUser.uid}`,
+                reason: 'スパム自動検知（クールダウン無視の連投）',
+                adminName: 'system', adminDiscordId: 'system', createdAt: Date.now()
+              });
+            } catch (e) { console.error(e); }
             showBoardStatus('スパムと判定されたため、7日間投稿できなくなりました。', true);
           } else {
             await update(metaRef, { cooldownViolations: violations });
@@ -1634,6 +1733,9 @@
           ${isAdminAuthor ? '' : `<button class="btn-warn" data-action="restrict" data-uid="${p.authorUid}">この人を投稿禁止に</button>`}
         </div>` : '';
 
+      const reportBtn = (currentUser && p.authorUid !== currentUser.uid) ?
+        `<button class="report-btn mono" data-report-post="${p.id}">🚩 通報する</button>` : '';
+
       // ---- 絵文字リアクション ----
       const reactions = p.reactions || {};
       const counts = {};
@@ -1686,6 +1788,7 @@
           <div class="post-body-wrap">
             ${bodyContent}
             ${reactionBar}
+            ${reportBtn}
             ${adminControls}
           </div>
         </div>`;
@@ -1694,17 +1797,31 @@
 
   // 管理者操作（投稿削除／ユーザーを投稿禁止に）／絵文字リアクション操作
   boardList.addEventListener('click', async (e) => {
+    const reportBtn = e.target.closest('button[data-report-post]');
+    if (reportBtn) {
+      e.stopPropagation();
+      if (!currentUser) return;
+      reportTargetPostId = reportBtn.dataset.reportPost;
+      reportReason.value = ''; reportStatusMsg.textContent = '';
+      reportOverlay.classList.add('open');
+      return;
+    }
+
     const actionBtn = e.target.closest('button[data-action]');
     if (actionBtn) {
       e.stopPropagation();
       if (!isAdmin) return;
       if (actionBtn.dataset.action === 'delete') {
-        if (!confirm('この投稿を削除しますか？')) return;
+        const reason = prompt('投稿を削除する理由を入力してください（記録として残ります）');
+        if (reason === null) return;
         await remove(ref(db, `posts/${actionBtn.dataset.id}`));
+        logAdminAction('投稿削除', `postId: ${actionBtn.dataset.id}`, reason);
       }
       if (actionBtn.dataset.action === 'restrict') {
-        if (!confirm('このユーザーを投稿禁止（閲覧のみ）にしますか？')) return;
+        const reason = prompt('投稿禁止（閲覧のみ）にする理由を入力してください（必須・記録として残ります）');
+        if (!reason || !reason.trim()) { alert('理由の入力が必要です。'); return; }
         await update(ref(db, `userMeta/${actionBtn.dataset.uid}`), { restricted: true });
+        logAdminAction('投稿禁止', `uid: ${actionBtn.dataset.uid}`, reason.trim());
       }
       return;
     }
@@ -1776,10 +1893,12 @@
     const id = adminManualId.value.trim();
     if (!id) { adminManualStatus.textContent = 'Discord IDを入力してください。'; adminManualStatus.className = 'status-msg error'; return; }
     if (id === ADMIN_DISCORD_ID) { adminManualStatus.textContent = '管理者自身は制限できません。'; adminManualStatus.className = 'status-msg error'; return; }
-    if (!confirm(`Discord ID: ${id} を投稿禁止（閲覧のみ）にしますか？`)) return;
+    const reason = prompt('投稿禁止にする理由を入力してください（必須・記録として残ります）');
+    if (!reason || !reason.trim()) { adminManualStatus.textContent = '理由の入力が必要です。'; adminManualStatus.className = 'status-msg error'; return; }
 
     try {
       await update(ref(db, `userMeta/discord:${id}`), { restricted: true });
+      logAdminAction('投稿禁止（ID指定）', `discordId: ${id}`, reason.trim());
       adminManualStatus.textContent = '投稿禁止に設定しました。';
       adminManualStatus.className = 'status-msg ok';
       adminManualId.value = '';
@@ -1831,9 +1950,11 @@
     const unbanBtn = e.target.closest('button[data-unban]');
     if (unrestrictBtn) {
       await update(ref(db, `userMeta/${unrestrictBtn.dataset.unrestrict}`), { restricted: false });
+      logAdminAction('投稿禁止解除', `uid: ${unrestrictBtn.dataset.unrestrict}`, '');
     }
     if (unbanBtn) {
       await update(ref(db, `userMeta/${unbanBtn.dataset.unban}`), { bannedUntil: null, cooldownViolations: 0 });
+      logAdminAction('BAN解除', `uid: ${unbanBtn.dataset.unban}`, '');
     }
   });
 
@@ -1882,13 +2003,100 @@
       if (!confirm(`「${approveBtn.dataset.domain}」を許可ドメインに追加しますか？`)) return;
       await push(ref(db, 'allowedDomains'), { domain: approveBtn.dataset.domain });
       await update(ref(db, `domainRequests/${approveBtn.dataset.approve}`), { status: 'approved' });
+      logAdminAction('ドメイン承認', approveBtn.dataset.domain, '');
     }
     if (rejectBtn) {
       if (!confirm('この申請を却下しますか？')) return;
       await update(ref(db, `domainRequests/${rejectBtn.dataset.reject}`), { status: 'rejected' });
+      logAdminAction('ドメイン却下', rejectBtn.dataset.reject, '');
     }
   });
+
+  // ================= 管理パネル：通報一覧 =================
+  const adminReportsList = document.getElementById('admin-reports-list');
+  function watchAdminReports() {
+    onValue(ref(db, 'reports'), (snapshot) => {
+      const val = snapshot.val() || {};
+      const items = Object.entries(val)
+        .map(([id, v]) => ({ id, ...v }))
+        .filter(v => (v.status || 'pending') === 'pending')
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      if (!items.length) {
+        adminReportsList.innerHTML = '<div class="empty-state" style="padding:20px;">保留中の通報はありません。</div>';
+        return;
+      }
+
+      adminReportsList.innerHTML = items.map(r => {
+        const date = r.createdAt ? new Date(r.createdAt) : null;
+        const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}` : '';
+        return `
+          <div class="admin-user-row" style="align-items:flex-start;">
+            <div>
+              <div class="name">投稿ID: ${escapeHtml(r.targetId)}</div>
+              <div class="flags">
+                通報者: ${escapeHtml(r.reporterName || '')}
+                ・ <a href="https://discord.com/users/${r.reporterDiscordId}" target="_blank" style="color:var(--cyan);">Discord: ${escapeHtml(String(r.reporterDiscordId || ''))}</a>
+                ・ ${dateStr}
+              </div>
+              ${r.reason ? `<div class="flags" style="margin-top:6px; color:var(--text);">${escapeHtml(r.reason)}</div>` : ''}
+            </div>
+            <div class="btns">
+              <button class="btn-danger" data-report-delete-post="${r.targetId}" data-report-id="${r.id}">投稿を削除</button>
+              <button class="btn-ghost" style="font-size:11px; padding:6px 10px;" data-report-dismiss="${r.id}">問題なし</button>
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
+
+  adminReportsList.addEventListener('click', async (e) => {
+    const delBtn = e.target.closest('button[data-report-delete-post]');
+    const dismissBtn = e.target.closest('button[data-report-dismiss]');
+    if (delBtn) {
+      const reason = prompt('投稿を削除する理由を入力してください（記録として残ります）');
+      if (reason === null) return;
+      await remove(ref(db, `posts/${delBtn.dataset.reportDeletePost}`));
+      await update(ref(db, `reports/${delBtn.dataset.reportId}`), { status: 'resolved' });
+      logAdminAction('通報対応（投稿削除）', `postId: ${delBtn.dataset.reportDeletePost}`, reason);
+    }
+    if (dismissBtn) {
+      await update(ref(db, `reports/${dismissBtn.dataset.reportDismiss}`), { status: 'dismissed' });
+      logAdminAction('通報対応（問題なし）', `reportId: ${dismissBtn.dataset.reportDismiss}`, '');
+    }
+  });
+
+  // ================= 管理パネル：操作ログ =================
+  const adminLogsList = document.getElementById('admin-logs-list');
+  function watchAdminLogs() {
+    onValue(ref(db, 'adminLogs'), (snapshot) => {
+      const val = snapshot.val() || {};
+      const items = Object.entries(val)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        .slice(0, 50);
+
+      if (!items.length) {
+        adminLogsList.innerHTML = '<div class="empty-state" style="padding:20px;">まだ操作ログはありません。</div>';
+        return;
+      }
+
+      adminLogsList.innerHTML = items.map(l => {
+        const date = l.createdAt ? new Date(l.createdAt) : null;
+        const dateStr = date ? `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}` : '';
+        return `
+          <div class="admin-user-row" style="align-items:flex-start;">
+            <div>
+              <div class="name">${escapeHtml(l.action)} ・ ${escapeHtml(l.target || '')}</div>
+              <div class="flags">実行者: ${escapeHtml(l.adminName || '')} ・ ${dateStr}</div>
+              ${l.reason ? `<div class="flags" style="margin-top:6px; color:var(--text);">理由: ${escapeHtml(l.reason)}</div>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    });
+  }
 </script>
 
 </body>
+
 </html>
